@@ -1,0 +1,397 @@
+---
+title: "Resolução P1"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-04-13"
+---
+
+O Produto Interno Bruto (PIB) denominado como PIB mensal é um indicador com frequência mensal produzido pelo Banco Central do Brasil (BCB) para utilização no cálculo da relação entre agregados econômicos mensais (como dívida pública, saldo em transações correntes e saldo de crédito) e o PIB. A partir da série do PIB fornecida, período janeiro de 2010 a dezembro de 2024, faça a seguinte análise:
+
+1.  Construa o gráfico da série temporal
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    library(readxl)
+    library(dplyr)
+
+    pib_br = ts(read_excel("PIB_Brasil_P1.xlsx")[[2]], start = c(2010, 1), end = c(2024, 12), freq = 12)
+
+    plot(pib_br,  ylab='PIB Mensal, R$ Milhoes', xlab='Data')
+
+    ```
+
+2.  Excluindo os dois últimos anos (2023 e 2024), obtenha a série dessazonalizada a partir de variáveis binárias. Apresente o modelo ajustado.
+
+    $$
+    Z_t = \beta_0 + \beta_1D_{jan}+ \beta_2D_{fev} + \beta_3D_{mar} + \beta_4D_{abr} + \beta_5D_{mai} + \beta_6D_{jun} + \beta_7D_{jul} + \beta_8D_{ago} + \beta_9D_{set} + \beta_{10}D_{out} + \beta_{11}D_{nov} + \epsilon_t
+    $$
+
+    Obs.: a variável omitida representa o mês de dezembro.
+
+    $$
+    Z_t = S_t + \epsilon_t \rightarrow \epsilon_t = Z_t - S_t 
+    $$
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    pib_br_2 <- ts(read_excel("PIB_Brasil_P1.xlsx")[[2]], start = c(2010, 1), end = c(2022, 12), freq = 12)
+
+    library(forecast) 
+
+    d = seasonaldummy(pib_br_2) 
+
+    modelo.seasonal = lm(pib_br_2 ~ d) 
+    summary(modelo.seasonal) 
+
+    plot.ts(modelo.seasonal$fitted.values) # sazonalidade estimada 
+    par(new=T) 
+    plot(pib_br_2, col='blue') # serie historica original 
+    par(new=T) 
+    plot.ts(modelo.seasonal$residuals, col='red') # serie desazonalizada representada por modelo.seasonal$residuals
+
+
+    ```
+
+3.  Excluindo os dois últimos anos (2023 e 2024), faça a decomposição da série em relação aos componentes de tendência, sazonalidade e termo errático, usando um modelo linear para a tendência e variáveis dummies para a sazonalidade. Apresente o modelo construído e os gráficos dos componentes.
+
+    $$ S_t = \beta_0 + \beta_1 t+\beta_2D_{jan}+ \beta_3D_{fev} + \beta_4D_{mar} + \beta_5D_{abr} + \beta_6D_{mai} + \beta_7D_{jun} + \beta_8D_{jul} + \beta_9D_{ago} + \beta_10D_{set} + \beta_{11}D_{out} + \beta_{12}D_{nov} + \epsilon_t$$
+
+    Obs.: atenção a inclusão da tendência inclue o componente $\beta_1t$, movendo as unidades dos betas dummies, não confundir.
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    n = length(pib_br_2)
+
+    t = ts(seq(1:n),start=c(2010,1), end = c(2022, 12), freq=12) # componente de tendencia
+
+    library(forecast)
+
+    dummies = seasonaldummy(pib_br_2) # componente de sazonalidade com dummies 
+
+    modelo = lm(pib_br_2 ~ t + dummies) # modelo linear
+
+    summary(modelo)
+
+    # Componente Errático = sem tendência 
+
+    e = ts(modelo$residuals, start = c(2010,1), freq = 12)
+
+    ```
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    b = modelo$coefficients # selecionando os betas, coeficientes estimados
+
+    tendencia = ts(b[1] + b[2]*t,start=c(2010,1),freq= 12) # tendencia estimada
+
+    sazonal = ts( b[3]*dummies[,1] + b[4]*dummies[,2] + b[5]*dummies[,3] + b[6]*dummies[,4] + b[7]*dummies[,5] + b[8]*dummies[,6] + b[9]*dummies[,7] + b[10]*dummies[,8] +  b[11]*dummies[,9] +  b[12]*dummies[,10] + b[13]*dummies[,11], start=c(2010,1),freq=12) # seasonal estimada
+
+    par(mfrow=c(2,2))
+    plot(pib_br_2)
+    plot(tendencia)
+    plot(sazonal)
+    plot(e)
+
+    ```
+
+4.  Faça a previsão, a partir do modelo construído no item 3, do período excluído da amostra. Apresente os valores estimados, faça o gráfico das séries observada e estimada. Calcule a raiz do erro quadrático médio (RMSE), o erro absoluto médio (MAE) e o erro absoluto percentual médio (MAPE).
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    n = length(pib_br_2)
+    h = 24
+
+    prev = matrix(NA,nrow=h,ncol=1)
+
+    for (i in 1:h){
+      prev[i]= b[1] + b[2]*(n+i) + 
+        b[3]*dummies[(12+(i-1)),1] + b[4]*dummies[(12+(i-1)),2] + 
+        b[5]*dummies[(12+(i-1)),3] + b[6]*dummies[(12+(i-1)),4] + 
+        b[7]*dummies[(12+(i-1)),5] + b[8]*dummies[(12+(i-1)),6] + 
+        b[9]*dummies[(12+(i-1)),7] + b[10]*dummies[(12+(i-1)),8] +  
+        b[11]*dummies[(12+(i-1)),9] +  b[12]*dummies[(12+(i-1)),10] +
+        b[11]*dummies[(12+(i-1)), 11] 
+    } 
+
+    # em que [(12+(i-1)), doze representa a posicao da linha nula da matriz de dummies
+
+    prev = ts(prev,start=c(2023,1),freq=12)
+    prev
+
+    modelo.estimado = ts(fitted(modelo), start=c(2010,1),freq=12)
+
+    min.dados=min(pib_br_2,prev)
+    max.dados=max(pib_br_2,prev)
+
+    plot(window(pib_br, start=c(2010,1),freq=12),ylim=c(min.dados,max.dados),col='blue',xlim=c(2010,2024))
+    lines(ts(modelo.estimado,start=c(2010,1),freq=12),col='red',xlim=c(2010,2024))
+    lines(ts(c(modelo.estimado[n],prev),start=c(2023,1),freq=12),col='green',xlim=c(2010,2024))
+
+    ```
+
+    Calculando a raiz do erro quadrático médio (RMSE), o erro absoluto médio (MAE) e o erro absoluto percentual médio (MAPE).
+
+    Medidas de Acurácia de Previsão:
+
+    -   MSE (Erro Quadrático Médio): $MSE = {\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$
+
+    -   RMSE (Raís do Erro Quadrático Médio): $RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$
+
+    -   MAE (Erro Médio Absoluto): $MAE = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|$
+
+    -   MAPE (Erro Absoluto Percentual): único que independe da unidade de medida. Porém, precisa ser valor positivo.
+
+        $MAPE = \frac{100}{n} \sum_{i=1}^{n} \left| \frac{y_i - \hat{y}_i}{y_i} \right|$
+
+    -   MASE (Erro Médio Absoluto Escalonado): previsão ingênua (naive).
+
+        $\text{MASE} = \frac{\frac{1}{n} \sum_{i=1}^n |y_i - \hat{y}_i|}{q}$
+
+        Em que, o fator de escalonagem é: $q = \frac{1}{n-1} \sum_{t=2}^n |y_t - y_{t-1}|$
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    h = 24 # quantidade de periodos previstos
+
+    erro=matrix(NA,nrow=h,ncol=1)
+    errop=matrix(NA,nrow=h,ncol=1)
+
+    for (i in 1:h){
+      erro[i]=pib_br[156+i]-prev[i] 
+      errop[i]= (pib_br[156+i]-prev[i])/pib_br[i]
+    }
+
+    # selecionando o item 156 da serie correspondente ao valor de dez/2022, ainda nao previsto
+
+    reqm = sqrt(sum(erro^2)/length(erro))
+    print(reqm)
+
+    ema=sum(abs(erro))/length(erro)
+    print(ema)
+
+    emp=100*(sum(abs(errop))/length(errop))
+    print(emp)
+    ```
+
+5.  Excluindo os dois últimos anos, faça a decomposição da série em relação aos componentes de tendência, sazonalidade e termo errático, a partir das **média móveis**. Apresente os valores dos índices sazonais e os gráficos dos componentes.
+
+    $$
+    Y_t=T_t \cdot S_t \cdot \epsilon_t \rightarrow \frac{Y_t}{T_t}=S_t \cdot \epsilon_t
+    $$
+
+    A partir da média móvel simples (perdemos os valores iniciais da série)
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    library('TTR')
+
+    r = 6 # Moving average window 
+
+    mm.simples = SMA(pib_br_2, r)
+
+    dados = cbind(pib_br_2, mm.simples)
+
+    min.y = min(pib_br_2)
+    max.y = max(pib_br_2)
+    plot(pib_br_2, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+    grid()
+    par(new=T)
+    plot(mm.simples, ylim = c(min.y, max.y), axes = F, ann = F, col = 'red')
+
+    ```
+
+    A partir da média móvel centrada (perdemos os valores iniciais e finais da serie):
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    library(forecast)
+
+    mm.centrada = ma(pib_br_2, order=12)
+
+    min.y = min(pib_br_2)
+    max.y = max(pib_br_2)
+    plot(pib_br_2, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+    grid()
+    par(new=T)
+    plot(mm.simples, ylim = c(min.y, max.y), axes = F, ann = F, col = 'red')
+    par(new=T)
+    plot(mm.centrada, ylim = c(min.y, max.y), axes = F, ann = F, col = 'green')
+    ```
+
+    Calculando os índices sazonais e os componentes por médias móveis:
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    mm = decompose(pib_br_2, type = 'multiplicative')
+    sazonal.mm = mm$seasonal # extraindo o componente sazonal
+
+    # Observando os indices sazonais
+    indice.sazonal = mm$figure
+    indice.sazonal
+
+    # Calculando serie dessazonalizada por media movel 
+    dessaz.mm = pib_br_2/sazonal.mm 
+    plot(dessaz.mm,  axes = F, ann = F)
+    par(new=T)
+    plot(pib_br_2, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+
+    # Plotando cada componente da formula acima (observado, tendencia, sazonal e aleatorio)
+    plot(mm)
+
+    ```
+
+6.  A partir dos modelos construídos para se obter o componente de tendência por polinômio linear e a sazonalidade obtida por média móvel. Apresente os valores estimados, faça os gráficos das séries observada e estimada. Calcule a raiz do erro quadrático médio (RMSE), o erro absoluto médio (MAE) e o erro absoluto percentual médio (MAPE).
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    # tendencia estimada por polinomio 
+    tendencia = ts(b[1] + b[2]*t,start=c(2010,1),freq= 12) # tendencia estimada
+
+    # sazonalidade estimada por média móvel
+    sazonal.mm = mm$seasonal # extraindo o componente sazonal
+
+    h = 24 # quantidade previsoes
+
+    prev.mm = matrix(NA, nrow = h, ncol=1)
+
+    j = 1 # primeiro componente sazonal dos indices sazonais 
+
+    r = 12 # tenho somente 12 índices sazonais (para cada mês do ano)
+
+    for (i in 1:h){
+      prev.mm[i] = mm.simples[length(pib_br_2)] * indice.sazonal[j]
+      
+      if(j < r )
+        j = j+1 #
+      else 
+        j=1
+    }
+
+    colnames(prev.mm) = 'Previsão'
+
+    prev.mm
+
+    min.dados = min(pib_br_2, prev.mm)
+    max.dados = max(pib_br_2, prev.mm)
+
+    plot(window (pib_br_2, start = c(2010, 1), freq = 12), ylim = c(min.dados, max.dados), col = 'blue', xlim = c(2010, 2025))
+    abline(v=2023, col='blue', lty=2)
+    lines(ts(prev.mm, start = c(2023,1), freq=12), col = 'red', xlim = c(2023,2024))
+    ```
+
+    Calculando a raiz do erro quadrático médio (RMSE), o erro absoluto médio (MAE) e o erro absoluto percentual médio (MAPE).
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    h = 24 # quantidade de periodos previstos
+
+    erro=matrix(NA,nrow=h,ncol=1)
+    errop=matrix(NA,nrow=h,ncol=1)
+
+    for (i in 1:h){
+      erro[i]=pib_br[156+i]-prev.mm[i] 
+      errop[i]= (pib_br[156+i]-prev.mm[i])/pib_br[i]
+    }
+
+    reqm = sqrt(sum(erro^2)/length(erro))
+    print(reqm)
+
+    ema=sum(abs(erro))/length(erro)
+    print(ema)
+
+    emp=100*(sum(abs(errop))/length(errop))
+    print(emp)
+
+    ```
+
+7.  Excluindo os dois últimos anos, ajuste o modelo de Suavização de Exponencial Simples. Apresente o valor do coeficiente de amortização e faça o gráfico da série observada e a estimada pelo modelo.
+
+    São modelos adaptativos, se autoajustam em função dos erros observados. São apropriados quando o número de observações é pequeno.
+
+    Para efeitos comparativos, modelo polinomial até então considerado não é adaptativo, isto é: $y_t = \beta_0+\beta_1 \cdot  T_t + \epsilon_t$, pois há um conjunto de dados para estimar os betas, e os betas não serão reestimados a cada nova informação que chega.
+
+    Vejamos os modelos de suavização:
+
+    -   Suavização Exponencial Simples (SES): não tem tendência, nem sazonalidade.
+
+    -   Suavização Exponencial de Holt (SEH): tem tendência, mas sem sazonalidade.
+
+    -   Suavização Exponencial de Holt-Winters (HW): quando tem sazonalidade
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    suavexp <- HoltWinters(pib_br_2, beta=FALSE, gamma=FALSE)
+    suavexp
+
+    h=24 # quantidade de períodos previstos 
+
+    prev_s <-predict(suavexp,n.ahead=h, prediction.interval=TRUE,level=0.95)
+    prev_s
+
+    plot(suavexp,prev_s)
+    ```
+
+8.  Excluindo os dois últimos anos, ajuste o modelo de Holt. Apresente os valores dos coeficientes de amortização e faça o gráfico da série observada e a estimada pelo modelo.
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    ajuste_holt=HoltWinters(pib_br_2, gamma=FALSE)
+    ajuste_holt
+
+    plot.ts(pib_br_2,ylab='Valores Observados/Ajustados',xlab='Tempo',main='')
+    lines(fitted(ajuste_holt)[,1],lwd=1,col='red')
+
+    h1=24
+    prev_holt=predict(ajuste_holt,n.ahead=h1, prediction.interval=TRUE,level=0.95)
+    plot(ajuste_holt,prev_holt)
+
+    ```
+
+9.  Excluindo os dois últimos anos, ajuste o modelo de Holt-Winters. Apresente os valores dos coeficientes de amortização e faça o gráfico da série observada e a estimada pelo modelo.
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    ajuste_holt=HoltWinters(pib_br_2)
+    ajuste_holt
+
+    plot.ts(pib_br_2,ylab='Valores Observados/Ajustados',xlab='Tempo',main='')
+    lines(fitted(ajuste_holt)[,1],lwd=1,col='red')
+
+    h1=24
+    prev_holt=predict(ajuste_holt,n.ahead=h1, prediction.interval=TRUE,level=0.95)
+    plot(ajuste_holt,prev_holt)
+
+    ```
+
+10. A partir do modelo de Holt-Winters, obtenha as previsoes para os anos de 2023 e 2024. Apresente os valores estimados, faca o grafico com as series observadas e estimadas e calcule a raiz do erro quadratico medio (RMSE), o erro absoluto medio (MAE) e o erro absoluto percentual medio (MAPE)
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    h1=24
+    prev_holt=predict(ajuste_holt,n.ahead=h1, prediction.interval=TRUE,level=0.95)
+    plot(ajuste_holt,prev_holt)
+
+
+    ```
+
+    ```{r}
+
+    erro=matrix(NA,nrow=h1,ncol=1)
+    errop=matrix(NA,nrow=h1,ncol=1)
+
+    for (i in 1:h){
+      erro[i]=pib_br[156+i]-prev_holt[i] 
+      errop[i]= (pib_br[156+i]-prev_holt[i])/pib_br[i]
+    }
+
+    reqm=sqrt(sum(erro^2)/length(erro))
+    print(reqm)
+
+    ema=sum(abs(erro))/length(erro)
+    print(ema)
+
+    emp=100*(sum(abs(errop))/length(errop))
+    print(emp)
+
+    ```

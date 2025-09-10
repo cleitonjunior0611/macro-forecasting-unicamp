@@ -1,0 +1,398 @@
+---
+title: "Resolucao P2"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2025-06-23"
+---
+
+O Produto Interno Bruto (PIB) denominado como PIB mensal é um indicador com frequência mensal produzido pelo Banco Central do Brasil (BCB) para utilização no cálculo da relação entre agregados econômicos mensais (como dívida pública, saldo em transações correntes e saldo de crédito) e o PIB. A partir da série do PIB fornecida, período janeiro de 2010 a dezembro de 2024, faça a seguinte análise:
+
+### 1.1. Identificação da Sazonalidade
+
+1.  Obtenha a série dessazonalizada a partir das média móveis.
+
+```{r, message=FALSE, warning=FALSE}
+
+#Carregar pacotes
+library(readxl) #Importar arquivos excel
+library(forecast) # Previsão de Modelos ARIMA
+library(lmtest) # Testes de Hipóteses de autocorrelação
+library(FinTS) # Teste de heterocedasticidade
+library(urca) # Teste de RU
+library(tseries) # Teste de Normalidade
+library(dplyr)
+
+pib_br = ts(read_excel("PIB_Brasil_P2.xlsx")[[2]], start = c(2010, 1), end = c(2024, 12), freq = 12) # window em MA será determinado pela freq
+
+plot(pib_br,  ylab='PIB Mensal, R$ Milhoes', xlab='Data')
+
+# Identificando a sazonalidade da série
+monthplot(pib_br, main='Gráfico 3 - Média e Desvio-padrão trimestral') # como MEAN e SD não são cte ao longo da série, apresenta sazonalidade
+
+```
+
+Para extrair o componente de sazonalidade do nosso modelo, iremos utilizar o formato multiplicativo. Além disso, iremos adotar médias móveis simples (perdemos os valores iniciais da série). A equação da extração do índice de sazonalidade é dada por:
+
+$$
+Y_t=T_t \cdot S_t \cdot \epsilon_t \rightarrow \frac{Y_t}{T_t}=S_t \cdot \epsilon_t
+$$
+
+A lógica é: primeiro faz uma média móvel (com janela igual a freq) para extrair a tendência-ciclo (suavizando a série temporal). Isso evita que picos e vales de um período interfiram na avaliação da sazonalidade. Em seguida ele isola o sazonal, removendo a tendência.
+
+```{r}
+library('TTR')
+library(forecast)
+
+# Plotando o componente sazonal 
+mm = decompose(pib_br, type = 'multiplicative')
+
+# Extraindo o componente sazonal
+sazonal.mm = mm$seasonal
+plot(sazonal.mm) 
+
+# Observando os indices sazonais médios para cada mês
+indice.sazonal = mm$figure
+indice.sazonal
+
+# Calculando serie dessazonalizada por media movel 
+
+dessaz.mm = pib_br/sazonal.mm
+
+min.pib_br = min(pib_br)
+max.pib_br = max(pib_br)
+plot(dessaz.mm,  axes = F, ann = F)
+par(new=T)
+plot(pib_br, ylim = c(min.pib_br, max.pib_br), ylab = "PIB", xlab = 'Ano', col = 'blue')
+
+
+# Plotando cada componente da formula acima (observado, tendencia, sazonal e aleatorio)
+plot(mm)
+```
+
+2.  A partir da série dessazonalizada, faça o teste de raiz unitária de Dikey-Fuller Aumentado. Apresente os resultados.
+
+O **teste de raiz unitária ADF (Augmented Dickey-Fuller)** tem como principal objetivo determinar se a série temporal segue um passeio aleatório (**random walk)**, o que indicaria **tendência estocástica e não-estacionariedade**. Se a série **tem raiz unitária**, suas propriedades estatísticas (como média e variância) mudam ao longo do tempo, o que **invalida muitas técnicas** de modelagem **econométrica**. O teste ADF ajuda a diferenciar se uma série é estacionária em torno de uma tendência determinística (como uma tendência linear) ou se possui tendência estocástica (não estacionária). Antes de aplicar modelos como **ARIMA** ou regressões com séries temporais, é essencial verificar se as variáveis são estacionárias.
+
+![](images/Screenshot%202025-05-12%20at%2016.39.17.png){width="597"}
+
+```{r}
+
+# Visualizando a série dessazonalizada
+plot(dessaz.mm)
+
+# Plotando o correlograma de autocorrelação
+library(forecast)
+Acf(dessaz.mm)
+
+```
+
+Nesse caso, observa-se uma alta dependência temporal (memória longa) da nossa série temporal.
+
+O ADF corrige a autocorrelação adicionando termos defasados de $\Delta Y_t$​ à regressão, sendo p a quantidade de lags (p) de forma que $\epsilon_t \sim RB(0, \delta^2)$ determinada a partir do método Bayesian (BIC) – pois é mais conservador que o Akaike (AIC). A autocorrelação parcial dos resíduos analisa a contribuição parcial de cada variável defasada para explicar a variável presente, ou seja, ajuda a identificar **dependências temporais diretas** – dessa forma $0.33 \Delta Y_{t-1}​$ representaria que, se o PIB cresceu 1% no último período, crescerá 0.33% a mais neste período.
+
+```{r}
+
+library(urca)
+
+# Modelo sem lags temporais
+dessaz.mm.df1 = ur.df(dessaz.mm, type = 'trend', lags = 0) # Modelo DF
+summary(dessaz.mm.df1)
+plot(dessaz.mm.df1)
+
+# Modelo geral
+dessaz.mm.df2 = ur.df(dessaz.mm, type = 'trend', lags = 12, selectlags = 'BIC') # Modelo ADF - tendência determinística e drift
+plot(dessaz.mm.df2)
+summary(dessaz.mm.df2)
+
+# Modelo com drift 
+dessaz.mm.df3 = ur.df(dessaz.mm, type = 'drift', lags = 12, selectlags = 'BIC') # Modelo ADF - somente drift
+plot(dessaz.mm.df3)
+summary(dessaz.mm.df3)
+
+# Modelo s/ tendência determinística ou drift
+dessaz.mm.df4 = ur.df(dessaz.mm, type = 'none', lags = 12, selectlags = 'BIC') # Modelo ADF - s/ tendência determinística e drift
+plot(dessaz.mm.df4)
+summary(dessaz.mm.df4)
+```
+
+Para todos os casos analisados, desde a equação mais geral até a mais simples, concluo que o pib dessazonalizado é não-estacionário (tem raíz unitária).
+
+Dica importante para avaliar: mesmo se cair dentro da região crítica, é importante ver se tem distribuição normal, ou seja, se a variável tem relevância estatística (regra do fluxograma).
+
+![](images/Screenshot%202025-05-12%20at%2016.48.21.png){width="628"}
+
+Dessa forma, **para estacionar nossa série temporal,** será necessário aplicar um diff.
+
+```{r}
+
+# Calculando a diff pois a série apresenta raíz unitária
+
+diff.dessaz.mm = diff(dessaz.mm, differences=1) 
+diff.dessaz.mm.adf = ur.df(diff.dessaz.mm,type='trend', selectlags = 'BIC',lags=12)
+summary(diff.dessaz.mm.adf)
+```
+
+```{r}
+
+library(tseries)
+
+# Adotarei o teste ADF por ser mais fácil de analisar. 
+adf.test(dessaz.mm) 
+
+diff1.dessaz.mm <- diff(dessaz.mm)  # 1ª diferença
+adf.test(diff1.dessaz.mm)           # Teste novamente
+
+diff2.dessaz.mm <- diff(diff1.dessaz.mm)  # 2ª diferença
+adf.test(diff2.dessaz.mm)                 # Teste novamente
+```
+
+### 1.2. Identificação Raíz Unitária
+
+3.  Excluindo os anos de 2023 e 2024 e a partir da série estacionária, construa a FAC e FACP e indique os possíveis modelos ARIMA.
+
+Na metodologia, Box-Jenkins (1970) a segunda etapa consiste, **a partir da série estacionária**, na construção das Funções de Autocorrelação (FAC) e Autocorrelação Parcial (FACP). Por isso, precisamos primeiramente estacionar a série.
+
+```{r}
+
+library(forecast)
+
+# Excluindo 2023 e 2024
+dessaz.mm.2022 <- window(dessaz.mm, end = c(2022, 12))
+
+# Avaliando a estacionariedade da série
+adf.test(dessaz.mm.2022) 
+
+# Avaliando quantas vezes devo diferenciar minha série para estacionar
+ndiffs(dessaz.mm.2022)
+
+# Calculando a diff pois a série apresenta raíz unitária
+diff.dessaz.mm.2022 = diff(dessaz.mm.2022, differences=1)
+
+adf.test(diff.dessaz.mm.2022) 
+
+diff.dessaz.mm.2022.adf = ur.df(diff.dessaz.mm.2022,type='drift',selectlags = 'BIC',lags=12)
+summary(diff.dessaz.mm.2022.adf)
+```
+
+Realizando a diferenciação da série com um lag temporal a série torna-se estacionária conforme o teste ADF.
+
+Lembrando que, o modelo Autorregressivo AR(p) - depende dos valores passados da série - é dado por: $X_t = c + \phi_1 X_{t-1} + \phi_2 X_{t-2} + \dots + \phi_p X_{t-p} + \epsilon_t$, em que, $\phi_p$ é o coeficiente autorregressivo que mede influência direta dos valores passados (lags) sobre o valor atual da série (ou seja, a autocorrelação parcial).
+
+E, a Média Móvel **MA(q)** - depende dos erros passados (ruídos aleatórios) - é dada por: $X_t = \mu + \epsilon_t + \theta_1 \epsilon_{t-1} + \theta_2 \epsilon_{t-2} + \dots + \theta_q \epsilon_{t-q}$, em que, *q* indica a defasagem mais elevada de choques. Lembrando da condição de invertibilidade de MA para AR, onde se $y_t$ é estacionária requer que $|\theta|<1$.
+
+Assim, temos que o modelo ARMA(p,q) é dado por $X_t = c + \sum_{i=1}^p \phi_i X_{t-i} + \epsilon_t + \sum_{j=1}^q \theta_j \epsilon_{t-j}$. Por exemplo, $Xt​=0.6X_{t-1}​+ϵ_t​+0.3ϵ_{t-1}$​ representa que o valor atual depende 60% do valor defasado, 30% do erro anterior.
+
+O modelo ARIMA inclui mais um componente na equação geral: **Integrado** – representando a diferenciação para tornar a série estacionária.
+
+![](images/Screenshot%202025-05-26%20at%2016.46.35.png){width="593"}
+
+A partir da série estacionária, o segundo passo na Identificação consiste na construção da FAC e FACP para determinar o tipo e a ordem do modelo:
+
+```{r}
+# Considerando a necessidade de diff para estacionar nossa série temporal, temos:
+par(mfrow=c(1,2))
+Acf(diff.dessaz.mm.2022)
+Acf(diff.dessaz.mm.2022,type='partial')
+```
+
+Avaliando o modelo, podemos considerar os possíveis candidatos ARIMA(p, d, q) : ARIMA(4, 1, 4), ARIMA(5, 1, 5) e ARIMA(6, 1, 6).
+
+### 2. Estimação do Modelo Ajustado
+
+4.  A partir dos critérios de informação AIC e BIC, indique o modelo a ser ajustado.
+
+Considerando os critérios de informação AIC e BIC para os três modelos ajustados, priorizando modelos parcimoniosos a modelos de ordem elevada, o modelo ARIMA (4,1,4) foi escolhido.
+
+```{r}
+#Modelo 1: ARIMA(4,1,4)
+p1 = 4
+d1 = 1
+q1 = 4
+ano= 2022
+mes = 12
+ajustpdq1 = Arima(window(dessaz.mm, end= c(ano, mes)),order=c(p1,d1,q1), method='ML', lambda = 0) # maximum likelihood (ML) = máxima verossimilhança
+summary(ajustpdq1)
+```
+
+```{r}
+
+#Modelo 2: ARIMA(5,1,5)
+p1=5
+d1=1
+q1=5
+ano=2022
+mes = 12
+ajustpdq2 = Arima(window(dessaz.mm, end= c(ano, mes)),order=c(p1,d1,q1),method='ML', lambda = 0) # maximum likelihood (ML) = máxima verossimilhança
+summary(ajustpdq2)
+```
+
+```{r}
+
+#Modelo 3: ARIMA(6,1,6)
+p1=6
+d1=1
+q1=6
+ano=2022
+mes = 12
+ajustpdq3 = Arima(window(dessaz.mm, end= c(ano, mes)),order=c(p1,d1,q1),method='ML', lambda = 0) # maximum likelihood (ML) = máxima verossimilhança
+summary(ajustpdq3)
+```
+
+### 3. Verificação do Modelo Ajustado
+
+5.  Faça a etapa de **verificação** do modelo indicado pelos critérios de informação e analise os resíduos de acordo com os critérios de autocorrelação serial, heterocedasticidade e normalidade.
+
+```{r}
+
+### Etapa 3 - VERIFICAÇÃO
+# Resíduos do modelo 2
+
+residuos=ts(ajustpdq1$residuals)
+
+Acf(residuos)
+
+Box.test(residuos,lag=1,type="Ljung-Box") # hipótese nula: resíduos não são autocorrelacionados 
+Box.test(residuos,lag=2,type="Ljung-Box")
+Box.test(residuos,lag=3,type="Ljung-Box") 
+Box.test(residuos,lag=4,type="Ljung-Box") 
+Box.test(residuos,lag=8,type="Ljung-Box")
+
+tsdiag(ajustpdq1,gof.lag = 24) # analise gráfica sintética do proposta acima
+
+Box.test(residuos,lag=13,type="Ljung-Box") # analisando um possível ponto problemático no gráfico
+
+
+```
+
+A estatística Ljung-Box (1978) serve para testar se os primeiros k coeficientes de autocorrelaçãao amostrais são estatisticamente iguais a zero. Nesse caso, observa-se que para até 24 defasagens a correlações são estatisticamente iguais a zero (não rejeita a hipótese nula). Ou seja, os resíduos do modelo são brancos (média e variância constantes). Entendemos que não há correlação residual no modelo escolhido, ou que as correlações residuais são iguais a zero.
+
+```{r}
+
+# teste de Normalidade
+
+par(mfrow=c(1,1))
+hist(residuos, freq=F, ylab='Densidade', xlab='Resíduos', main='Resíduos')
+par(new=TRUE)
+plot(density(residuos), axes=F,ann=F, col=4, lwd=2)  
+
+# hipótese nula (H₀): Os dados são normalmente distribuídos
+
+jarque.bera.test(residuos) 
+
+shapiro.test(residuos)
+
+
+```
+
+Observamos uma distribuição relativamente normal dos resíduos graficamente mas, não estatísticamente.
+
+```{r}
+# Teste de Homocedasticidade
+ArchTest(residuos, lag=4)
+ArchTest(residuos, lag=8)
+ArchTest(residuos, lag=12)
+
+```
+
+Não rejeitar a hipótese nula significa ausência de heterocedasticidade.
+
+6.  Caso o modelo indicado pelos critérios de informação viole uma das hipóteses de ruído branco, faça a identificação de um novo modelo, reestime os parâmetros e faça a etapa de verificação.
+
+7.  Após a verificação do(s) modelo(s), indique aquele que seja o mais adequado para a etapa de previsão.
+
+8.  A partir do modelo selecionado, faça a previsão um passo à frente e 24 passos à frente para o período excluído da amostra (2023 a 2024). Apresente os valores estimados e faça o gráfico das séries observada e estimadas para as previsões um passo à frente e 24 passos à frente.
+
+    ```{r}
+    # Validação/Previsão
+
+    plot(dessaz.mm,ylab="PIB")
+    lines(ajustpdq1$fit,col='red')
+    grid()
+
+    accuracy(ajustpdq1) # divide entre training e test set 
+    ```
+
+    ```{r}
+
+    #Período teste 2010 a 2022, 1 passo à frente (conheço o instante imediatamente anterior, ou seja, não é previsão sobre previsão)
+
+    ano = 2023
+    mes = 1
+    model1 <- Arima(window(dessaz.mm,start=c(ano, mes)), model=ajustpdq1, biasadj=T)
+    model1$fit
+
+    plot(dessaz.mm,ylab="PIB")
+    abline(v=(2023),col='blue',lty=1)
+    lines(model1$fit,col='red')
+
+    accuracy(model1)
+    ```
+
+    ```{r}
+
+    # Período teste 2010 a 2022, previsão 24 passos à frente
+    passos = 24 
+    prev=forecast(ajustpdq1,h=passos,level=c(0.95), biasadj=T)
+    prev
+    plot(prev)
+
+    min.pib=min(dessaz.mm,prev$lower)
+    max.pib=max(dessaz.mm,prev$upper)
+    plot(forecast(ajustpdq1,h=passos,level=c(0.95), biasadj=T), ylab="PIB")
+    lines(dessaz.mm)
+    lines(ajustpdq1$fit,col='red')
+
+    accuracy(forecast(ajustpdq1,h=passos,biasadj=T),window(dessaz.mm,start=ano))
+    ```
+
+9.  A partir do modelo selecionado, obtenha os erros: raiz do erro quadrático médio (RMSE), erro absoluto médio (MAE) e erro absoluto percentual médio (MAPE) para o **período de treinamento.**
+
+    ```{r}
+    # Avaliação dos erros para o período de treinamento
+    accuracy(ajustpdq1) # divide entre training e test set 
+
+    ```
+
+10. Apresente os erros (RMSE, MAE e MAPE) de previsão um passo à frente e 24 passos à frente para o período de teste.
+
+    ```{r}
+
+
+    # Para um passo a frente
+    accuracy(model1)
+
+    # Para 24 passos a frente 
+    accuracy(forecast(ajustpdq1,h=passos,biasadj=T),window(dessaz.mm,start=ano))
+    ```
+
+    Com a estatística Theil's U \> 1 significa que o erro do modelo é maior do que a previsão ingênua ( quando estima que o valor futuro é igual ao valor atual).
+
+11. A partir da ordem selecionada após a etapa de verificação dos resíduos, reestime o modelo selecionado usando o período de janeiro de 2010 a dezembro de 2024.
+
+    ```{r}
+
+    #Modelo 1: ARIMA(4,1,4)
+    p1 = 4
+    d1 = 1
+    q1 = 4
+    ano= 2024
+    mes = 12
+    ajustpdq = Arima(window(dessaz.mm, end= c(ano, mes)),order=c(p1,d1,q1),method='ML', lambda = 0) # maximum likelihood (ML) = máxima verossimilhança
+    summary(ajustpdq)
+
+
+    ```
+
+12. Obtenha as previsões para o PIB mensal do ano de 2025.
+
+    ```{r}
+
+    # Período teste 2010 a 2022, previsão 24 passos à frente
+    passos = 12
+    prev=forecast(ajustpdq,h=passos,level=c(0.95), biasadj=T)
+    prev
+    plot(prev)
+
+    ```

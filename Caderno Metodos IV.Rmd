@@ -1,0 +1,1931 @@
+---
+title: "Caderno Métodos IV"
+output: html_document
+date: "2025-03-10"
+---
+
+# 1. Decomposição de Séries Temporais
+
+![](images/Screenshot%202025-06-16%20at%2015.47.56.png){width="579"}
+
+A primeira sessão tratará sobre a decomposição de séries temporais com componente de tendência estimado com polinômio de regressão linear e componente sazonal com variáveis dummies; os mesmos componentes por médias móveis.
+
+Faca os graficos das seguintes series:
+
+1.  Dados mensais de total de passageiros em linhas aereas internacionais nos EUA entre 1949 a 1960 (Box, Jenkins, Reinsel & Ljung, 2016)
+
+    ```{r}
+    y = AirPassengers
+
+    plot(log(y))
+    ```
+
+    O fluxo aéreo americano aumenta durante a época do thanksgiving (final de novembro).
+
+2.  Consumo de Gas no Reino Unido entre o primeiro trimestre de 1960 e o quarto trimestre de 1986 (Durbin, J. & Koopman, S. J., 2001)
+
+    ```{r}
+
+    z = UKgas
+
+    plot(log(z))
+    ```
+
+3.  PIB anual da Belgica (arquivo PIBAnualBelgica:xlsx), de 1953 a 2010 Faca uma analise do comportamento das series.
+
+    ```{r}
+
+    library(readxl)
+
+    pib_belg= ts(read_excel("PIB_Anual_Belgica.xlsx")[,2], start = 1953, freq = 1)
+    plot(pib_belg)
+
+    ```
+
+    Linearizando a série transformando os valores em log():
+
+    ```{r}
+
+    plot(log(pib_belg))
+
+    ```
+
+## 1.1. Tendência Linear
+
+Considerando a serie anual do PIB - paridade do poder de compra (PPC) - per capita - US\$ de 2017, Brasil, periodo 1980 a 2021, disponivel no IPEADATA (arquivo PIBBrasil:xlsx), faca:
+
+1.  Gráfico da série
+
+    ```{r}
+
+    library(readxl)
+
+    pib_brasil = ts(read_excel("PIB_Brasil.xlsx")[,2], start = 1980, freq = 1) #time series
+    plot(pib_brasil)
+    ```
+
+2.  Estime o componente de tendencia, supondo que seja linear.
+
+    ```{r}
+
+    # Modelo Linear
+
+    t = ts(seq(1:length(pib_brasil)), start = 1980, freq =1 )
+
+    modelo = lm(pib_brasil ~ t)
+    summary(modelo)
+
+    ```
+
+3.  Obtenha a serie livre de tendencia
+
+    A série livre de tendência é dada por: $$
+    \hat{\epsilon}_t = \hat{pib_{brasil}} -(\hat{\beta}_0 - \hat{\beta}_1t) \rightarrow \hat{\epsilon}_t = Z_t -\hat{T_t}
+    $$
+
+    ```{r}
+    # Componente Errático = sem tendência 
+
+    e = ts(modelo$residuals, start = 1980, freq = 1)
+
+    # Calculando a tendência estimada
+
+    tend_estimada = ts(modelo$fitted.values, start =1980, freq =1)
+
+    # Outra forma de fazer de calcular a tendencia estimada:
+
+    z = ts(fitted(modelo), start =1980, freq =1)
+
+    ```
+
+4.  Faça um gráfico com a série original, a série de tendência e a série livre de tendência
+
+    ```{r}
+
+    # Plotando o grafico
+
+    min.dados = min(pib_brasil,z,e)
+    min.dados
+
+    max.dados = max(pib_brasil, z, e)
+    max.dados
+
+    plot(pib_brasil, ylim=c(min.dados, max.dados), ylab='PIB', xlab = 'Anos', col = 'blue')
+    par(new=T)
+    plot(z,  ylim=c(min.dados, max.dados), axes = F, ann = F, col = 'red')
+    par(new = T)
+    plot(e,  ylim=c(min.dados, max.dados), axes = F, ann = F)
+
+    ```
+
+5.  Obtenha o valor previsto para o ano 2022-24
+
+    ```{r}
+
+    n = length(pib_brasil)
+    prev2022 = modelo$coefficients[1]+ modelo$coefficients[2] * (n+1)
+    prev2022
+    prev2023 = modelo$coefficients[1]+ modelo$coefficients[2] * (n+2)
+    prev2023
+    prev2024 = modelo$coefficients[1]+ modelo$coefficients[2] * (n+3)
+    prev2024
+
+    ```
+
+    ```{r}
+
+    # Criando uma funcao para isso
+    n = length(pib_brasil)
+    h = 3
+    prev = matrix(NA, nrow=h, ncol=1)
+
+    for (i in 1:h){
+      prev[i] = modelo$coefficients[1] + modelo$coefficients[2]*(n+i)
+      }
+
+    prev
+
+    ```
+
+    ```{r}
+
+    min.dados1 = min(pib_brasil, prev, z)
+    max.dados1 = max(pib_brasil, prev, z)
+
+    plot(window(pib_brasil, start =1980, freq = 1), ylim = c(min.dados1, max.dados1), ylab='PIB', xlab = 'Anos', col = 'blue', xlim = c(1980, 2024))
+
+    lines(ts(z, start = 1980, freq =1), col = 'red')
+    abline(v=2021, col = 'blue', lty =30)
+    lines(ts(c(z[length(z)], prev), start = 2021, freq =1), col = 'green', lty = 1, xlim = c(1980, 2024))
+
+    ```
+
+Considerando a serie anual do PIB da Belgica (arquivo PIB−Anual−Belgica.xlsx), de 1953 a 2010, faca:
+
+1.  Grafico da serie
+
+    ```{r}
+
+    library(readxl)
+
+    pib_belg= ts(read_excel("PIB_Anual_Belgica.xlsx")[,2], start = 1953, freq = 1)
+    plot(pib_belg, ylab='PIB', xlab='Anos')
+    ```
+
+2.  Estime o componente de tendencia
+
+    ```{r}
+
+    n=length(pib_belg)
+
+    t=ts(seq(1:n),start=1953,freq=1)
+
+    modelo.linear = lm(pib_belg ~ t)
+    summary(modelo.linear)
+
+    y.linear = ts(fitted(modelo.linear),start=1953,freq=1)
+
+    min.pib=min(pib_belg, y.linear)
+    max.pib=max(pib_belg,y.linear)
+
+    plot(pib_belg,ylab='PIB',xlab='Anos',ylim=c(min.pib,max.pib),col='blue')
+    par(new=TRUE)
+    plot(y.linear,ann=F,axes=F,ylim=c(min.pib,max.pib),col='red')
+
+    ```
+
+3.  Obtenha a serie livre de tendencia
+
+    ```{r}
+
+    # Obter a série livre de tendência
+    e =ts(residuals(modelo.linear),start=1953,freq=1)
+
+    plot(pib_belg,ylab='PIB',xlab='Anos',ylim=c(min.pib,max.pib),col='blue')
+    par(new=TRUE)
+    plot(y.linear,ann=F,axes=F,ylim=c(min.pib,max.pib),col='red')
+    par(new=T)
+    plot(e,ann=F,axes=F,ylim=c(min.pib,max.pib),col='green')
+
+    ```
+
+4.  Faca um grafico com a serie original, a serie de tendencia estimada e serie livre de tendencia
+
+5.  Obtenha o valor previsto para os anos de 2011 a 2020
+
+    ```{r}
+
+    # Previsão de 2011 a 2020
+    h=10
+    prev=matrix(NA,nrow=h,ncol=1)
+
+    for (i in 1:h){
+      prev[i] = modelo.linear$coefficients[1] + modelo.linear$coefficients[2]*(n+i)
+    }
+    prev
+
+    min.dados1=min(pib_belg,prev,y.linear)
+    min.dados1
+
+    max.dados1=max(pib_belg,prev,y.linear)
+    max.dados1
+
+    plot(window(pib_belg,start=1953),ylim=c(min.dados1,max.dados1),ylab='PIB',
+         xlab='Anos',col='blue',lwd=2,xlim=c(1953,2021))
+
+    lines(ts(y.linear,start=c(1953),freq=1),col='red',lwd=2)
+    abline(v=end(pib_belg),col='blue',lty=2)
+    lines(ts(c(y.linear[length(y.linear)],prev),start=c(2010,1),freq=1),
+          col='darkred',lty=2,lwd=2)
+
+    ```
+
+## 1.2. Sazonalidade c/ Dummies
+
+Utilizaremos as variáveis **dummies**. Por simplicidade, trateremos a periodicidade **trimestral**.
+
+$$
+S_t = \beta_0 + \beta_1D_2+ \beta_2D_3 + \beta_3 D_4
+$$
+
+Note que, o primeiro trimestre é dado quando todas as variáveis dummies assumem valor nulo. Isso também significa que todos os efeitos medidos pelo $D_i$ será equivalente ao primeiro trimestre.
+
+**Exercício**
+
+Para a serie mensal de taxa de desemprego - RMSP (arquivo TaxaDesemprego.xlsx), a partir de janeiro de 1985:
+
+$$
+Z_t = S_t + \epsilon_t
+$$
+
+a)  Remova a sazonalidade usando a tecnica de variaveis dummies.
+
+b)  Obtenha os fatores sazonais. Esses fatores sao conjuntamente, signicativamente diferentes de zero?
+
+c)  Faca os graficos da serie original, da serie sazonal e da serie dessazonalizada.
+
+```{r}
+
+library(readxl)
+
+y = read_excel('TaxaDesemprego.xlsx')
+
+desemp = ts(y[,2], start=c(1985,1), freq=12) # dados mensais 
+plot(desemp, ylab ='Tx Desemprego')
+```
+
+Ajustando um modelo sazonal com cada mes como variavel dummy
+
+```{r}
+#install.packages('forecast') 
+library(forecast) 
+
+d = seasonaldummy(desemp) 
+
+# View(d) 
+
+modelo.seasonal= lm(desemp ~ d) 
+summary(modelo.seasonal) 
+
+plot.ts(modelo.seasonal$fitted.values) # sazonalidade estimada 
+par(new=T) 
+plot(desemp, col='blue') # serie historica original 
+par(new=T) 
+plot.ts(modelo.seasonal$residuals, col='red') # serie desazonalizada 
+
+```
+
+O valor-p da estatistica F representa a significancia conjunta das variaveis binarias.
+
+O gráfico em vermelho representa a série desazonalizada, significaria tirar da série original (RED) a sazonalidade estimada (BLACK).
+
+$$
+e_t=desemp_t-(\hat\beta_0+\hat\beta_1 D_1+...+\hat\beta_{11} D_{11})
+$$
+
+## 1.3. Tendência Linear e Sazonalidade Dummie
+
+Para a serie trimestral do PIB Agropecuaria do Brasil, Fonte IPEADATA, periodo 2000 T1 a 2023 T3, faca:
+
+O modelo ajustado é:$$
+lpib_t=\beta_0+\beta_1t+\beta_2D_1+\beta_3D_2+\beta_4D_3
+$$
+
+a)  Faca o grafico da serie
+
+```{r}
+library(readxl)
+
+dados=read_excel('PIB_Agropecuaria.xlsx')
+
+pib=ts(dados[,2],start=c(2000,1),freq=4)
+plot(pib)
+
+lpib=log(pib)
+plot(lpib)
+```
+
+b)  Remova a tendencia e sazonalidade a partir de um polinomio e variaveis dummies, respectivamente.
+
+```{r}
+
+n=length(lpib)
+
+t=ts(seq(1:n),start=c(2000,1),freq=4) # componente de tendencia
+
+library(forecast)
+dummies=seasonaldummy(lpib) # componente de sazonalidade
+
+modelo=lm(lpib ~ t + dummies)
+summary(modelo)
+
+b=modelo$coefficients
+
+tendencia=ts(b[1] + b[2]*t,start=c(2000,1),freq=4)
+
+sazonal=ts(b[3]*dummies[,1]+b[4]*dummies[,2]+b[5]*dummies[,3],start=c(2000,1),freq=4)
+
+aleatorio=ts(modelo$residuals,start=c(2000,1),freq=4) # modelo sem tendência e sazonalidade
+
+par(mfrow=c(2,2))
+plot(lpib)
+plot(tendencia)
+plot(sazonal)
+plot(aleatorio)
+
+```
+
+c)  Faca o grafico da serie original, o grafico da serie sazonal, o grafico da serie de tendencia e o grafico da serie do componente aleatorio.
+
+```{r}
+
+h=5
+
+lprev=matrix(NA,nrow=h,ncol=1)
+
+for (i in 1:h){
+  lprev[i]=b[1] + b[2]* (n+i) + b[3]*dummies[(88+(i-1)),1]+b[4]*dummies[(88+(i-1)),2] + b[5]*dummies[(88+(i-1)),3]
+} 
+
+# (88+(i-1)) indica que quero pegar a partir da linha em que todas as dummies sao nulas, representando o quarto trimestre.
+
+prev = matrix(NA,nrow=h,ncol=1)
+prev=ts(exp(lprev),start=c(2023,4),freq=4)
+prev
+
+
+modelo.estimado=ts(exp(fitted(modelo)),start=c(2000,1),freq=4)
+
+min.dados=min(pib,prev)
+max.dados=max(pib,prev)
+
+plot(window(pib,start=c(2000,1),freq=4),ylim=c(min.dados,max.dados),col='blue',xlim=c(2000,2025))
+lines(ts(modelo.estimado,start=c(2000,1),freq=4),col='red',xlim=c(2000,2025))
+lines(ts(c(modelo.estimado[n],prev),start=c(2023,3),freq=4),col='green',xlim=c(2000,2025))
+```
+
+## 1.4. Médias Móveis
+
+É uma média que se movimenta tendo um intervalo de período fixo ('janela'). Possui o objetivo de suavizar a série temporal, ***obtendo uma medida de tendência***. Note que, perderemos os valores iniciais (n-1) a depender do tamanho da janela, por se tratar de uma média.
+
+### 1.4.1. Média Móvel Simples
+
+Considerando os dados de total de passageiros aereos, de janeiro de 1949 a dezembro de 1960, faca:
+
+1.  Gráfico da série
+2.  Ajuste o modelo media movel simples, usando uma janela igual a 3, 6 e 12. Analise as diferencas entre cada um dos valores da janela fixa
+3.  Faca o grafico da serie original e da tendencia estimada, para cada uma das janelas considerada.
+
+```{r}
+
+y = AirPassengers
+
+library('TTR')
+
+r = 12 # Moving average window 
+
+mm.simples = SMA(y, r)
+
+dados = cbind(y, mm.simples)
+
+min.y = min(y)
+max.y = max(y)
+plot(y, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+grid()
+par(new=T)
+plot(mm.simples, ylim = c(min.y, max.y), axes = F, ann = F, col = 'red')
+
+```
+
+### 1.4.2. Média Móvel Centrada
+
+Os valores perdidos para o cálculo da média será no inicio e no fim da série. O principal problema no seu cálculo é quando o número de observações é impar, faz-se uma soma ponderada das observações.
+
+Considerando os dados de total de passageiros aereos, de janeiro de 1949 a dezembro de 1960, faca:
+
+1.  Ajuste o modelo media movel centrada, usando uma janela igual a 3, 6 e 12;
+2.  Faca o gráfico da serie original e da tendencia
+
+```{r}
+library(forecast)
+
+mm.centrada = ma(y, order=12)
+
+min.y = min(y)
+max.y = max(y)
+plot(y, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+grid()
+par(new=T)
+plot(mm.simples, ylim = c(min.y, max.y), axes = F, ann = F, col = 'red')
+par(new=T)
+plot(mm.centrada, ylim = c(min.y, max.y), axes = F, ann = F, col = 'green')
+```
+
+Observe que a linha verde (média móvel centrada) não vai até o final do período, como a média móvel simples (linha vermelha). Por isso, a MA simples é mais utilizada.
+
+### **1.4.3. Índices Sazonais e Componentes por Medias Moveis**
+
+**ATENÇÃO!** Se fizer uma transformação logarítimica, eu irei transformar meu modelo no formato aditivo. Tenha cuidado.
+
+Lembrando como extrair o componente de sazonalidade (modelo no formato multiplicativo, é possível fazer o mesmo no formato aditivo):
+
+$$
+Y_t=T_t \cdot S_t \cdot \epsilon_t \rightarrow \frac{Y_t}{T_t}=S_t \cdot \epsilon_t
+$$
+
+A lógica é a seguinte: Primeiro faz uma média móvel para extrair a tendência-ciclo. Isso evita que picos e vales de um período interfiram na avaliação da sazonalidade. Em seguida ele isola o sazonal, removendo a tendência.
+
+```{r}
+
+# Plotando o componente sazonal 
+mm = decompose( y, type = 'multiplicative')
+sazonal.mm = mm$seasonal 
+plot(sazonal.mm)
+
+# Observando os indices sazonais.
+indice.sazonal = mm$figure
+indice.sazonal
+
+# Calculando serie dessazonalizada por media movel 
+dessaz.mm = y/sazonal.mm
+plot(dessaz.mm,  axes = F, ann = F)
+par(new=T)
+plot(y, ylim = c(min.y, max.y), ylab = "No. Passengers", xlab = 'Year', col = 'blue')
+
+
+# Plotando cada componente da formula acima (observado, tendencia, sazonal e aleatorio)
+plot(mm)
+```
+
+Considerando os dados de total de passageiros aéreos, de janeiro de 1949 a dezembro de 1960, faça:
+
+1.  Obtenha a decomposição da série nos componentes de tendência, sazonal e errático;
+
+2.  Obtenha os fatores sazonais. Os componentes sazonais afetam a série temporal?
+
+3.  Faça o gráfico da série original, o gráfico da série sazonal e o gráfico da série dessazonalizada.
+
+```{r}
+
+h = 15 # quantidade previsoes
+
+prev.mm = matrix(NA, nrow = h, ncol=1)
+
+j = 1 # primeiro componente sazonal dos indices sazonais 
+
+r = 12 # tenho somente 12 índices sazonais (para cada mês do ano), porem quero prever para 15 meses, portanto, irei repetir os componentes de jan, fev e mar
+
+for (i in 1:h){
+  prev.mm[i] = mm.simples[length(y)] * indice.sazonal[j]
+  
+  if(j < r )
+    j = j+1 
+  else 
+    j=1
+}
+
+colnames(prev.mm) = 'Previsão'
+```
+
+```{r}
+
+min.dados = min(y, prev.mm)
+max.dados = max(y, prev.mm)
+
+plot(window (y, start = c(1949, 1), freq = 12), ylim = c(min.dados, max.dados), col = 'blue', xlim = c(1949, 1962))
+abline(v=1961, col='blue', lty=2)
+lines(ts(prev.mm, start = c(1961,1), freq=12), col = 'red', xlim = c(1961,1962))
+
+```
+
+# 2. Método de Suavização Exponencial
+
+São ***modelos adaptativos***, se autoajustam em função dos erros observados. São apropriados quando o número de observações é pequeno. Serve para a análise e previsão de séries temporais com **média estável**.
+
+Para efeitos comparativos, modelo polinomial até então considerado não é adaptativo, isto é: $y_t = \beta_0+\beta_1 \cdot  T_t + \epsilon_t$, pois há um conjunto de dados para estimar os betas, e os betas não serão reestimados a cada nova informação que chega.
+
+Vejamos os modelos de suavização:
+
+-   Suavização Exponencial Simples (SES): não tem tendência, nem sazonalidade.
+
+-   Suavização Exponencial de Holt (SEH): tem tendência, mas sem sazonalidade.
+
+-   Suavização Exponencial de Holt-Winters (HW): quando tem sazonalidade, portanto, tendência.
+
+## 2.1. Suavização Exponencial Simples (SES)
+
+Usado para estimar a volatilidade de séries temporais para calcular o risco. No mercado financeiro é conhecido como EWMA (usado pelo JP Morgan)
+
+$$
+\tilde{Y_t} = \alpha Y_t + (1-\alpha)\tilde{Y}_{t-1}
+$$
+
+Quanto maior o $\alpha$, menos suavizada a série. Note que o índice de suavização é um peso entre o valor atual e o valor passado. Nada mais é do que uma **média ponderada.** Por isso, o primeiro valor é sempre nulo, pois não tem valor anterior.
+
+Quando estou fazendo previsão de tendência, iremos considerar o valor suavizado final como constante.
+
+### Medidas de Acurácia de Previsão
+
+-   MSE (Erro Quadrático Médio): $MSE = {\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$
+
+-   RMSE (Raís do Erro Quadrático Médio): $RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$
+
+-   MAE (Erro Médio Absoluto): $MAE = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|$
+
+-   MAPE (Erro Absoluto Percentual): único que independe da unidade de medida. Porém, precisa ser valor positivo.
+
+    $MAPE = \frac{100}{n} \sum_{i=1}^{n} \left| \frac{y_i - \hat{y}_i}{y_i} \right|$
+
+-   MASE (Erro Médio Absoluto Escalonado): previsão ingênua (naive).
+
+    $\text{MASE} = \frac{\frac{1}{n} \sum_{i=1}^n |y_i - \hat{y}_i|}{q}$
+
+    Em que, o fator de escalonagem é: $q = \frac{1}{n-1} \sum_{t=2}^n |y_t - y_{t-1}|$
+
+Exercício 1
+
+Considerando a serie temporal de temperatura media anual em graus Fahrenheit em New Haven, Connecticut, de 1912 a 1971:
+
+1.  Gráfico da série
+
+```{r}
+
+serie = nhtemp
+
+plot(serie, main = "Dados de Temperatura Média Anual",
+  ylab = "Temperatura (deg. F)")
+```
+
+Quando o parâmetro alpha não é definido, automaticamente o seu valor será dado pela minimização da soma dos erros quadrados: $min \sum \epsilon^2$
+
+```{r}
+ajuste0<- HoltWinters(serie, alpha=0.25,beta=FALSE, gamma=FALSE) # alpha dado
+ajuste0
+
+plot(ajuste0)
+
+ajuste1<-HoltWinters(serie, beta=FALSE, gamma=FALSE) # alpha determinado automaticamente
+ajuste1
+
+plot(ajuste1)
+
+
+previsao <- predict(ajuste1, n.ahead=8, prediction.interval=TRUE, level=0.95) # intervalo de confiança de 95%
+
+previsao
+
+plot (ajuste1,previsao)
+
+```
+
+2.  Ajuste um modelo de suavizacao exponencial, usando os dados de 1912 a 1950.
+3.  Faca a previsao para o periodo 1951 a 1971.
+
+```{r}
+dados1=ts(serie,start=c(1912,1), end=c(1950,1), freq=1)
+plot(dados1)
+
+suavexp <- HoltWinters(dados1, beta=FALSE, gamma=FALSE)
+suavexp
+
+h=21 # quantidade de períodos previstos 
+
+prev<-predict(suavexp,n.ahead=h, prediction.interval=TRUE,level=0.95)
+prev
+
+plot(suavexp,prev)
+
+```
+
+```{r}
+
+N=length(serie)
+par(mfrow=c(1,1))
+plot.ts(prev[,1], col='red',lty=2,ylim=c(min(prev,serie),max(prev,serie)),xlab='Ano', ylab='Temperatura')
+par(new=TRUE)
+plot.ts(serie[40:N], axes=F,ann=F, col='blue', bty='l')
+```
+
+```{r}
+min.dados1=min(serie,prev)
+min.dados1
+
+max.dados1=max(serie,prev)
+max.dados1
+
+
+plot(suavexp,ylim=c(min.dados1,max.dados1),ylab='Temperatura',
+     xlab='Anos',col='blue',lwd=2,xlim=c(1912,1971))
+abline(v=1950,col='blue',lty=2)
+lines(ts(c(suavexp$fitted[length(suavexp$fitted)],prev[,1]),start=c(1950),freq=1),
+      col='green',lty=1,lwd=2,xlim=c(1912,1971))
+lines(ts(c(suavexp$x[length(suavexp$x)],serie[41:length(serie)]),start=c(1950),freq=1),
+      col='blue',lty=1,lwd=2,xlim=c(1912,1971))
+
+```
+
+4.  Calcule os erros de previsão
+
+```{r}
+erro=matrix(NA,nrow=h,ncol=1)
+errop=matrix(NA,nrow=h,ncol=1)
+
+for (i in 1:h){
+  erro[i]=serie[39+i]-prev[i]
+  errop[i]=(serie[39+i]-prev[i])/serie[39+i]
+}
+
+reqm=sqrt(sum(erro^2)/length(erro))
+print(reqm)
+
+ema=sum(abs(erro))/length(erro)
+print(ema)
+
+emp=100*(sum(abs(errop))/length(errop))
+print(emp)
+```
+
+## 2.2. Suavização Exponencial de Holt
+
+Lembrando, essa suavização inclue o componente de tendência. As constantes α e β são as que juntas minimizam a soma de quadrados de ajustamento ( pelo modelo para minimizar o soma do quadrado dos erros (SSE) ou o máximo da likelihood)
+
+$$
+\tilde{Y_t} = \alpha Y_t + (1-\alpha)(\tilde{Y}_{t-1} - \hat{T}_{t-1}) \\
+\hat{T_t}=\beta(\hat{Y_t}-\hat{T}_{t-1})+(1-\beta)\hat T_{t-1}
+$$
+
+A partir da dados anuais de 1937 a 1960 de milhas de voos dos passageiros pelas companhias aereas comerciais nos Estados Unidos, faca:
+
+1.  Grafico da serie;
+
+```{r}
+y=airmiles
+plot(y)
+
+```
+
+2.  Ajuste um modelo de suavizacao exponencial de Holt, usando os dados de 1937 a 1950;
+3.  Faca a previsao para o periodo 1951 a 1960.
+
+```{r}
+y1=ts(y,start=1937,end=1950)
+ajuste_holt=HoltWinters(y1, gamma=FALSE)
+ajuste_holt
+fitted(ajuste_holt)
+
+plot.ts(y1,ylab='Valores Observados/Ajustados',xlab='Tempo',main='')
+lines(fitted(ajuste_holt)[,1],lwd=1,col='red')
+
+h1=10
+prev_holt=predict(ajuste_holt,n.ahead=h1, prediction.interval=TRUE,level=0.95)
+plot(ajuste_holt,prev_holt)
+```
+
+```{r}
+min.dados1=min(y,prev_holt)
+min.dados1
+
+max.dados1=max(y,prev_holt)
+max.dados1
+
+
+plot(ajuste_holt,ylim=c(min.dados1,max.dados1),ylab='Temperatura',
+     xlab='Anos',col='blue',lwd=2,xlim=c(1937,1960))
+abline(v=1950,col='blue',lty=2)
+lines(ts(c(ajuste_holt$fitted[length(ajuste_holt$fitted[,1])],prev_holt[,1]),start=c(1950),freq=1),
+      col='green',lty=1,lwd=2,xlim=c(1937,1960))
+lines(ts(c(ajuste_holt$x[length(ajuste_holt$x)],y[15:length(y)]),start=c(1950),freq=1),
+      col='blue',lty=1,lwd=2,xlim=c(1937,1960))
+
+```
+
+4.  Calcule os Erros de Previsão
+
+```{r}
+erro=matrix(NA,nrow=h1,ncol=1)
+errop=matrix(NA,nrow=h1,ncol=1)
+
+for (i in 1:h1){
+  erro[i]=y[14+i]-prev_holt[i]
+  errop[i]=(y[14+i]-prev_holt[i])/y[14+i]
+}
+
+reqm=sqrt(sum(erro^2)/length(erro))
+print(reqm)
+
+ema=sum(abs(erro))/length(erro)
+print(ema)
+
+emp=100*(sum(abs(errop))/length(errop))
+print(emp)
+```
+
+## 2.3. Suavização Exponencial de Holt - Winters
+
+O último modelo junta os dois modelos acima tratados. Há 3 equações diferentes: nível, tendência e sazonalidade.
+
+$$
+\hat{Y}_t = \alpha(Y_t - \hat{S}_{t-s}) + (1-\alpha)(\hat{Y}_{t-1} - \hat{T}_{t-1}) \\
+\hat{T}_t = \beta(\hat{Y}_t - \hat{Y}_{t-1}) + (1-\beta)\hat{T}_{t-1} \\
+\hat{S}_t = \gamma(Y_t - \hat{Y}_{t-1} - \hat{T}_{t-1}) + (1-\gamma)\hat{S}_{t-s}
+$$
+
+Exercício 3
+
+Considerando a serie temporal de AirPassengers que registra mensalmente o total de passageiros internacionais (em milhares) da linha aerea no periodo de janeiro de 1949 a dezembro 1960, nos EUA
+
+1.  Gráfico da série
+
+```{r}
+y=AirPassengers
+plot(y)
+
+```
+
+2.  Ajuste um modelo de suavizacao exponencial, usando os dados de janeiro de 1949 a dezembro de 1950
+3.  Faca a previsao para o periodo janeiro de 1951 a dezembro de 1960
+
+```{r}
+y1=ts(y,start=c(1949,1),end=c(1958,12),freq=12)
+ajuste_holt=HoltWinters(y1)
+ajuste_holt
+fitted(ajuste_holt)
+
+plot.ts(y1,ylab='Valores Observados/Ajustados',xlab='Tempo',main='')
+lines(fitted(ajuste_holt)[,1],lwd=1,col='red')
+
+h1=24
+prev_holt=predict(ajuste_holt,n.ahead=h1, prediction.interval=TRUE,level=0.95)
+plot(ajuste_holt,prev_holt)
+```
+
+```{r}
+min.dados1=min(y,prev_holt)
+min.dados1
+
+max.dados1=max(y,prev_holt)
+max.dados1
+
+
+plot(ajuste_holt,ylim=c(min.dados1,max.dados1),ylab='Temperatura',
+     xlab='Anos',col='blue',lwd=2,xlim=c(1949,1961))
+abline(v=c(1959,1),col='blue',lty=2)
+lines(ts(c(ajuste_holt$fitted[length(ajuste_holt$fitted[,1])],prev_holt[,1]),start=c(1959,1),freq=12),
+      col='green',lty=1,lwd=2,xlim=c(1949,1961))
+lines(ts(c(y[length(y)],y[121:length(y)]),start=c(1959,1),freq=12),
+      col='blue',lty=1,lwd=2,xlim=c(1949,1961))
+
+```
+
+4.  Erros de Previsão
+
+```{r}
+erro=matrix(NA,nrow=h1,ncol=1)
+errop=matrix(NA,nrow=h1,ncol=1)
+
+for (i in 1:h1){
+  erro[i]=y[120+i]-prev_holt[i]
+  errop[i]=(y[120+i]-prev_holt[i])/y[120+i]
+}
+
+reqm=sqrt(sum(erro^2)/length(erro))
+print(reqm)
+
+ema=sum(abs(erro))/length(erro)
+print(ema)
+
+emp=100*(sum(abs(errop))/length(errop))
+print(emp)
+```
+
+# 3. Processo Estocástico
+
+**Objetivo**: identificar o processo gerador da série.
+
+O objetivo é chegar na equação, por isso, chego na mais geral possível e vou adequando. Primeiro, eu analiso se a série é estacionária com o teste de raíz unitária, caso contrário, faço uma transformação para estacionar.
+
+É como se tivéssemos uma **família de trajetórias** no tempo. Dessa forma, por exemplo para a série temporal do PIB, trataremos a variável observada como aleatória, por isso, o valor observado seria uma das possibilidades dessa variável de assumir esse valor.
+
+![](images/clipboard-2806389365.png){width="348"}
+
+-   Definição de **estacionariedade**: propriedades estatísticas (média, variância, covariância) são invariantes no tempo, ou seja, **estácionárias**. Caso contrário são **não-estacionárias**.
+
+-   Séries temporais podem ser determinísticas ou estocásticas:
+
+    -   **Determinística**: valores da série podem ser escritos por uma função matemática **perfeitamente** determinada por uma ou mais variáveis. Atenção para o termo 'perfeitamente'!
+
+    -   **Estocásticas:** valores da série incluem um termo aleatório (= estocástico).
+
+## 3.1. Processo Estocástico Estacionário
+
+$$
+y_t= c + \epsilon_t
+$$
+
+-   Processo estocástico *fracamento* estacionário (mais comum no mundo real):
+
+    -   Média constante
+
+    -   Variante Constante
+
+    -   Covariância depende da distância k entre os valores
+
+-   **Autocorrelação:** verifica como um valor se relaciona com si mesmo. A correlação é a covariância pelo desvio padrão (raíz quadrada da variância).
+
+-   **Correlograma**: gráfico de autocorrelação da série temporal. Se a série temporal é estacionária, as correlações observadas tendem a assumirem valores nulos (Processo Ergódico: no limite a correlação tende a zero no infinito). **Ou seja, não é significativamente diferente de zero.**
+
+-   Ruído branco: é a definição do termo aleatório com valor médio zero e variância constante. Se apresenta uma distribuição normal, é chamado de **ruído branco gaussiano**.
+
+**Exemplos de Simulação:**
+
+Gerar sérires com 500 observações e construa o correlograma:
+
+```{r}
+n = 500 
+set.seed(123456)
+epsilon = ts(rnorm(n, 0,1)) # gerando n valores com distribuicao normal
+plot(epsilon)
+
+acf(epsilon) # grafico da autocorrelacao
+
+# Outra forma de plotar a autocorrelacao
+library(forecast)
+Acf(epsilon) # retiro o primeiro ponto, dado que a autocorrelacao no mesmo ponto é 1
+
+```
+
+1.  $y_t = \epsilon_t, \epsilon \sim RB(0,1)$
+
+    ```{r}
+    n = 500 
+    set.seed(123456)
+    epsilon = ts(rnorm(n, 0,1)) # gerando n valores com distribuicao normal
+    plot(epsilon)
+    acf(epsilon) #fazendo grafico da autocorrelacao
+
+    # Outra forma de plotar a autocorrelacao 
+    library(forecast)
+    Acf(epsilon) # retiro o primeiro ponto, dado que a autocorrelacao no mesmo ponto é 1
+    ```
+
+    Pela análise do gráfico de autocorrelação, conclui-se que a série é estacionária. Pois os valores **não** são estatisticamente diferente de zero.
+
+2.  $y_t = 5 + \epsilon_t$
+
+    ```{r}
+
+    c = 5
+    y2 = ts(rep(0,n))
+
+    for (t in 1:n)
+      y2[t] = c + epsilon[t]
+
+    plot(y2)
+    Acf(y2)
+    ```
+
+    Pela análise do gráfico de autocorrelação, conclui-se que a série é estacionária. Pois os valores **não** são estatisticamente diferente de zero.
+
+3.  $y_t = 0.5 + 0.1 t+ \epsilon_t$
+
+    ```{r}
+
+    y3 = ts(rep(0,n))
+
+    for (t in 1:n)
+      y3[t] = 0.5 + 0.1*t + epsilon[t]
+
+    plot(y3)
+    Acf(y3)
+    ```
+
+    Observando a tendência, observa-se que a autocorrelação é alta, ou seja, há uma forte **dependência temporal** entre os valores (memória longa). Portanto, conclui-se que a série NÃO é estacionária. Pois os valores são estatisticamente diferente de zero.
+
+4.  $y_t = 0.7 y_{t-1} + \epsilon_t$
+
+    ```{r}
+
+    y4 = 0.0
+
+    for (t in 2:n) # tem começar em 2, pois o primeiro é o zero
+      y4[t] = 0.7 * y4[t-1] + epsilon[t]
+
+    y4 = ts(y4)
+    plot(y4)
+    Acf(y4)
+    ```
+
+    Essa é uma equação a diferença (*vide* economat III), um modelo autorregressivo de ordem 1. Assim, no limite, avaliando recursivamente, é possível identificar a média e a variância da minha equação.
+
+    Pela análise do gráfico de autocorrelação, conclui-se que a série é estacionária a partir do sexto período. Pois os valores **não** são estatisticamente diferente de zero a partir dele.
+
+    **Atenção**! É importante se atentar para a média e a variância do modelo. Professora pergunta para avaliar.
+
+5.  $y_t = 0.5 + 0.6t - 0.7 y_{t-1} + \epsilon_t$
+
+    ```{r}
+
+    y5 = 0.0
+
+    for (t in 2:n) # tem começar em 2, pois o primeiro é o zero
+      y5[t] = 0.5 + 0.6 * t - 0.7* y5[t-1] + epsilon[t]
+
+    y5 = ts(y5)
+    plot(y5)
+    Acf(y5)
+
+    ```
+
+    Esse é um exemplo de tendência determinística. Observando a tendência, observa-se que autocorrelação é alto, ou seja, há uma forte dependência temporal entre os valores (memória longa). Portanto, conclui-se que a série NÃO é estacionária. Pois os valores são estatisticamente diferente de zero.
+
+6.  $y_t = y_{t-1} + \epsilon_t$
+
+    ```{r}
+
+    y6 = 0.0
+
+    for (t in 2:n) # tem começar em 2, pois o primeiro é o zero
+      y6[t] = y6[t-1] + epsilon[t]
+
+    y6 = ts(y6)
+    plot(y6)
+    Acf(y6)
+    ```
+
+    Esse é um exemplo de tendência estacionária (o gráfico sobre desce). Observando a tendência, observa-se que autocorrelação é alto, ou seja, há uma forte dependência temporal entre os valores (memória longa). Portanto, conclui-se que a série NÃO é estacionária. Pois os valores são estatisticamente diferente de zero.
+
+7.  $y_t = 3 + 0.5t + y_{t-1} + \epsilon_t$
+
+    ```{r}
+
+    y7 = 0.0
+
+    for (t in 2:n) # tem começar em 2, pois o primeiro é o zero
+      y7[t] = 3 + 0.5*t + y7[t-1] + epsilon[t]
+
+    y7 = ts(y7)
+    plot(y7)
+    Acf(y7)
+
+    ```
+
+    Série temporal não estacionária. Observando a tendência, observa-se que autocorrelação é alto, ou seja, há uma forte dependência temporal entre os valores (memória longa). Portanto, conclui-se que a série NÃO é estacionária. Pois os valores são estatisticamente diferente de zero.
+
+8.  Faca o gráfio da evolução do PIB Agropecuaria e o correlograma. A partir da analise do correlograma, a serie do PIB Agropecuaria é estacionaria?
+
+    ```{r, message=FALSE, warning=FALSE}
+
+    library(readxl)
+
+    pib = read_excel('PIB_Agropecuaria_estocastico.xlsx')
+
+    pib = ts(pib[,2], start = c(2000,1), freq = 4)
+
+    plot(pib)
+
+    library(forecast)
+
+    Acf(pib)
+
+    ```
+
+9.  Faca o gráfio da série do IPCA e o correlograma. A partir da analise do correlograma, a serie do IPCA é estacionaria?
+
+    ```{r}
+
+    ipca = read_excel('IPCA.xlsx')
+
+    ipca = ts(ipca[,2], start = c(1998,1), freq = 12)
+
+    plot(ipca)
+
+    library(forecast)
+
+    Acf(ipca)
+    ```
+
+    Avaliando o grafico de autocorrelaçao, observa-se que depois de 4 meses não há mais uma dependencia temporal.
+
+10. Faca o gráfio da Taxa de Câmbio e o correlograma. A partir da analise do correlograma, a Taxa de Câmbio é estacionaria?
+
+    ```{r}
+
+    cambio = read_excel('Cambio.xlsx')
+
+    cambio = ts(cambio[,2], start = c(2000,1), freq = 12)
+
+    plot(cambio)
+
+    library(forecast)
+
+    Acf(cambio)
+
+    ```
+
+11. Faca o grafico da variação do log da taxa de Câmbio e o correlograma. A partir da análise do correlograma, a variação do log(Cambio) é estacionária?
+
+    ```{r}
+
+    lcambio = log(cambio) # para suavizar a série linearizando
+    plot(lcambio)
+    Acf(lcambio)
+
+    dcambio = diff(lcambio) # para tirar a tendência
+    plot(dcambio)
+    Acf(dcambio)
+
+    ```
+
+## 3.2. Teste de Raíz Unitária
+
+Antes de aplicar modelos como **ARIMA** ou regressões com séries temporais, é essencial verificar se as variáveis são estacionárias. O ADF é um dos testes mais usados para essa finalidade.
+
+Uma serie temporal é **não-estacionária** quando sua **média e/ou variância não são constantes** ao longo do tempo. Na literatura, **uma serie não-estacionária é denominada série com [uma raíz unitária]{.underline}**. Exemplos: taxa de câmbio, PIB, preço de um ativo financeiro.
+
+**Exemplo de raíz unitária**: Random-Walk (passeio aleatório)
+
+$$
+Y_t = \alpha + \rho Y_{t-1}+\epsilon_t
+$$
+
+em que $\epsilon_t \sim RB(0, \delta^2)$ e $\alpha$ é a constante denominada drift.
+
+O modelo terá uma raíz unitária (série não-estacionária), se somente se $\rho=1$
+
+A solução geral (tomada recursivamente), para qualquer instante de tempo t, é dada por:
+
+$$
+Y_t = \alpha*t+ \rho Y_o+\sum_{j=1}^t\epsilon
+$$
+
+Dessa forma, o **teste de raíz unitária**, chamado Teste Dickey Fuller é um teste unilateral em que testa se **H0 : ρ = 1 (tem raíz unitária), contra H1 : ρ \< 1 (não tem raíz unitária).**
+
+![](images/Screenshot%202025-06-16%20at%2016.38.14.png){width="584"}
+
+Para realizar o teste, preciso buscar identificar qual o **processo gerador da série**, considerando 3 possibilidades:
+
+![](images/Screenshot%202025-05-05%20at%2017.16.28.png){width="596"}
+
+$\alpha$ representa uma constante, $\beta$ representa tendência determinística (ou seja, não aleatória), $\rho$ e $\gamma$ representam a estacionariedade da equação.
+
+Lembrete: **série com tendência é não-estacionária**, afinal, a média não é zero.
+
+![](images/Screenshot%202025-05-12%20at%2016.39.17.png){width="597"}
+
+O ADF **corrige a autocorrelação** adicionando **termos defasados de** $\Delta Y_t$​ à regressão, sendo p o número de defasagens (escolhido via **AIC/BIC**).
+
+![](images/Screenshot%202025-06-09%20at%2014.14.07.png){width="602"}
+
+Onde avalariaremos:
+
+-   tau3 – Raiz unitária com drift e tendência
+
+-   phi2 – Raiz unitária sem tendência (mas com contante)
+
+-   phi3 – Raiz unitária sem drift e sem tendência
+
+Verificar a existência de RU para:
+
+1.  Série de IPCA
+
+    ```{r}
+
+    library(readxl)
+
+    ipca_ru = read_excel('IPCA_RaizUnitaria.xlsx')
+
+    ipca_ru = ts(ipca_ru[[2]], start = c(1995,1), freq = 12)
+
+    plot(ipca_ru)
+
+    ```
+
+    Nesse modelo, testarei se existe o processo gerador mais abrangente, o qual apresenta um *drift* (uma constante) e uma tendência.
+
+    ```{r}
+
+    library(urca)
+
+    ipca.df = ur.df(ipca_ru, type = 'trend', lags = 0 ) # type = 'trend' entende que incluo drift e tendencia, lags = 0 indica que não desejo testar o modelo aumentado
+
+    plot(ipca.df)
+    summary(ipca.df)
+    ```
+
+    A autocorrelação parcial dos resíduos analisa a contribuição parcial de cada variável defasada para explicar a variavel presente (lembrar conceito de econometria, de intersecção).
+
+    Os resultados da regressão indicam o valor médio da variável defasada (z.log.1) e o valor da tendência.
+
+    **Nota importante:** o **valor crítico t** representa a divisão do **valor estimado** pelo **erro-padrão**!
+
+    Como o valor calculado (**-5.07**) é **mais negativo** que o valor crítico a 1% (**-3.99**), ele cai na **região de rejeição** da hipótese nula (lembrando que o teste ADF é monocaudal à esquerda, pois valores negativos extremos favorecem a estacionariedade).
+
+    **Conclusão**: Rejeita-se a hipótese nula de **raiz unitária** (ou seja, a série é **estacionária**).
+
+![](images/Screenshot%202025-05-05%20at%2017.35.17.png){width="639"}
+
+2.  Taxa de Cambio medio Euro/US\$ (Fonte: IPEADATA).
+
+    ```{r}
+
+    library(readxl)
+
+    cambio = read_excel('Cambio_RaizUnitaria.xlsx')
+
+    # View(cambio)
+
+    cambio = ts(cambio[,2], start = c(1999,1), freq=12)
+
+    plot(cambio)
+
+    ```
+
+    ```{r}
+
+    library(urca)
+
+    cambio.df1 = ur.df(cambio, type = 'trend', lags = 0)
+    plot(cambio.df1)
+
+    summary(cambio.df1)
+
+    cambio.df2 = ur.df(cambio, type = 'trend', lags = 1) # coloco lags = 1 p/ ver se tem ruido branco 
+
+    plot(cambio.df2)
+    summary(cambio.df2)
+
+    ```
+
+    No caso do ruído branco, vejo que ele não é o caso, dado que, nas autocorrelações dos resíduos todas as correlações defasadas deveriam ser nulas, o que não é o caso do segundo risco.
+
+    Na autocorrelação parcial dos residuos, observa-se que a primeira defasagem contribui para explicar a variação de Yt. Por isso, vamos colocar lags=1.
+
+    Para analisar, devo analisar os valores da estatística dick-fuller (fluxograma), não a estatística t. Apenas utilizamos a estatística t quando as setas vão para a lateral.
+
+    Comparar value of test-statistic com o valor crítico de tau2 5pct. Para avaliar se rejeito ou não a hipótese nula. Depois comparo para o phi3.
+
+    Nesse caso, ao colocar lag=1 temos ruídos brancos. Considere a fórmula (4), com tendência. Agora veja como:
+
+    $$
+    \Delta \hat Y_t = 0.072 - 0.0003t - 0.061Y_{t-1} +  0.308\Delta Y_{t-1}
+    $$
+
+    ![](images/Screenshot%202025-05-12%20at%2016.39.17.png){width="626"}
+
+    ![](images/Screenshot%202025-05-12%20at%2016.48.21.png){width="628"}
+
+    Primeiro, avalio se $\gamma$ é nulo, depois, analiso se $\beta$ é nulo. Caso verificado, devemos analisar o modelo sem tendência determinística (sem t).
+
+    $$
+    \Delta \hat Y_t = 0.14- 0.016Y_{t-1} +  0.348\Delta Y_{t-1}
+    $$
+
+    ```{r}
+
+    cambio.df3 = ur.df(cambio, type = 'drift', lags = 1)
+    plot(cambio.df3)
+    summary(cambio.df3)
+
+    ```
+
+    Comparar value of test-statistic com o valor crítico de tau2 5pct. Para avaliar se rejeito ou não a hipótese nula. Depois comparo para o phi1.
+
+    $$
+    \Delta \hat Y_t = - 0.0013Y_{t-1} +  0.33\Delta Y_{t-1}
+    $$
+
+    ```{r}
+
+    cambio.df4 = ur.df(cambio, type = 'none', lags = 1)
+    plot(cambio.df4)
+    summary(cambio.df4)
+
+    ```
+
+    Dessa forma, comparando os valores, concluo que a taxa de câmbio é não-estacionária.
+
+Para identificar o numero de atrasos p de forma que $\epsilon_t \sim RB(0, \delta^2)$, usa-se:
+
+1)  Analise das autocorrelacoes parciais dos residuos do modelo sem termos de aumento;
+
+2)  Ou os criterios de informacao: Akaike (AIC) ou Bayesian (BIC)
+
+    Quero um modelo com a menor quantidade de parâmetros possíveis, caso contrário, afeto meus graus de liberdade e preciso de mais observações. Por isso, quero saber quantas defasagens são necessárias para incluir no modelo. A abordagem BIC é mais conservadora, pois sempre determina uma quantidade p menor ou igual ao determinado por AIC.
+
+    ```{r}
+
+    cambio.df = ur.df(cambio, type = 'none', lags = 12, selectlags = 'BIC')
+    plot(cambio.df)
+    summary(cambio.df)
+
+    ```
+
+3)  Variação da Taxa de Câmbio
+
+    ```{r}
+
+    dcambio = diff(cambio)
+    plot(dcambio)
+    acf(dcambio) # autocorrelacao 
+
+    ```
+
+    Modelo3 : s/tendência e s/ constante
+
+    ```{r}
+
+    dcambio.df = ur.df(dcambio, type = 'none', lags = 12, selectlags = 'BIC')
+    summary(dcambio.df)
+    ```
+
+    Rejeito hipótese nula, série é estacionária, não tem raíz unitária.
+
+## 3.3. ARMA (AutoRegressivo de Média Móvel)
+
+Antes de aplicar modelos como **ARMA** ou regressões com séries temporais, é essencial verificar se as variáveis são estacionárias. O ADF é um dos testes mais usados para essa finalidade. Somente aplico ARMA para séries estacionárias. Para séries com tendência, eu aplico ARIMA. Para séries com sazonalidade eu aplico SARIMA.
+
+**Revisando os conceitos:**
+
+-   **Processo estocástico**: coleção de variáveis aleatórias ordenadas no tempo.
+
+-   **Processo Estocástico Estacionário:** média e variância são constantes ao longo do tempo, covariância depende da distância entre os valores da série.
+
+-   **Processo Ergódico:** autocovariância (autocorrelação) tende a zero no tempo para infinito.
+
+-   Processos [**Puramente Aleatórios**]{.underline} (**ruídos brancos**) possuem média zero, variância constante e correlação igual a zero.
+
+**Modelo Auto-Regressivo**
+
+![](images/Screenshot%202025-05-19%20at%2016.24.05.png){width="570"}
+
+Sendo *p* a quantidade de períodos defesados.
+
+**Atenção**! Como $y_t$ é estacionário, tem-se que \|φ\| \< 1 (a constante \<1)
+
+![](images/Screenshot%202025-05-19%20at%2016.35.54.png){width="568"}
+
+**Atenção**! É possível identificar um modelo autorregressivo quando a autocovariância apresenta um padrão decrescente (*vide equação 8),* e a parcial trincada em 1.
+
+![](images/Screenshot%202025-05-19%20at%2016.41.37.png){width="583"}
+
+![](images/Screenshot%202025-06-18%20at%2013.09.21.png){width="587"}
+
+![](images/Screenshot%202025-05-19%20at%2016.42.41.png){width="581"}
+
+![](images/Screenshot%202025-05-19%20at%2016.55.02.png){width="582"}
+
+![](images/Screenshot%202025-05-19%20at%2016.55.28.png){width="583"}
+
+**Simulando um processo AR(p)**
+
+1.  Gere um processo AR(1) estável com 1000 observações e φ = 0, 9, ou seja,
+
+    $$
+    y_t=0.9y_{t-1}+\epsilon_t
+    $$
+
+    e faça o gráfico da série gerada e a FAC e FACP.
+
+    ```{r}
+
+    N = 1000
+    set.seed(123456)
+
+    epsilon = ts(rnorm(N, 0, 1))
+
+    y = matrix(0, nrow = N, ncol=1)
+
+    for (i in 2:N) {
+      y[i] = 0.9 * y[i-1]+epsilon[i] # lembrando que o y[1] = 0 
+    }
+
+    y = ts(y)
+
+    plot(y)
+
+    library(forecast)
+
+    Acf(y, type = 'correlation')
+    Acf(y,type = 'partial')
+    ```
+
+2.  Gere um processo AR(2) estavel com 1000 observacoes e φ1 = −0, 5 e φ2 = 0.4, ou seja,
+
+    $$
+    y_t = −0, 5y_{t−1} + 0, 4y_{t−2} + \epsilon_t
+    $$
+
+    e faca o grafico da serie gerada e a FAC e FACP.
+
+    ```{r}
+
+    N = 1000
+    set.seed(123456)
+
+    epsilon = ts(rnorm(N, 0, 1))
+
+    y = matrix(0, nrow = N, ncol=1)
+
+    for (i in 3:N) {  # lembrando que o y[1] = 0 e y[2] = 0
+      y[i] = (-0.5)* y[i-1] + (0.4)*y[i-2] + epsilon[i]
+    }
+
+    y = ts(y)
+
+    plot(y)
+
+    library(forecast)
+
+    Acf(y, type = 'correlation')
+    Acf(y,type = 'partial')
+    ```
+
+Com base nas FAC e FACP da serie taxa mensal de inflacao medida pelo IPCA entre janeiro de 1995 e setembro de 2011, arquivo IPCA.xlsx, identifique o modelo de serie temporal.
+
+Lembrando que, pelo teste de raíz unitária, essa série temporal é estacionária (rejeita hipótese nula de raíz unitária)
+
+```{r}
+
+library(readxl)
+
+ipca = read_excel('IPCA_ARMA.xlsx')
+ipca = ts(ipca[[2]], start = c(1995,1), freq=12)
+
+plot(ipca)
+
+Acf(ipca, type = 'correlation')
+Acf(ipca, type = 'partial')
+```
+
+Análise: com ACF pode ser que o modelo seja autorregressivo dada a queda. Com ACFP indica que pode ser ajustado por um modelo autorregressivo de ordem 1.
+
+![](images/Screenshot%202025-05-26%20at%2016.29.48.png){width="616"}
+
+![](images/Screenshot%202025-05-26%20at%2016.35.11.png){width="616"}
+
+Em um modelo autorregressivo, a ordem *p* será dada pela FACP, dado que FAC representa decaimento. Já no modelo de médias móveis a ordem *q* é dada pela FAC, dado que FACP representa decaimento.
+
+![](images/Screenshot%202025-05-26%20at%2016.42.49.png){width="615"}
+
+Juntando ambos os modelos, em FAC teremos um decaimento após a ordem *q*, ou seja, teremos um decaimento da parte regressiva e uma ordem *q* da parte média móvel. Em FACP, teremos um decaimento após a ordem *p*.
+
+**Exemplo (ARMA(1,1))**:
+
+Assim, temos que o modelo ARMA é dado por $X_t = c + \sum_{i=1}^p \phi_i X_{t-i} + \epsilon_t + \sum_{j=1}^q \theta_j \epsilon_{t-j}$. Onde $Xt​=0.6X_{t−1}​+ϵ_t​+0.3ϵ_{t−1}$​ representa que o valor atual depende 60% do valor defasado, 30% do erro anterior.
+
+![](images/Screenshot%202025-05-26%20at%2016.46.35.png){width="593"}
+
+Dessa forma, irei testar tipos de modelo ARMA, por exemplo, ARMA(2,0) ou ARMA(1,1) e calcular os seus resíduos segundo alguma abordagem (MQO, por exemplo). Ao analisarmos os gráficos de FAC e FACP.
+
+**Exercício**
+
+A partir das series do arquivo Exemplos.xlsx, faca a identificacao dos Modelos ARMA.
+
+```{r}
+
+library(readxl)
+
+dado = read_excel('Exemplos_ARMA.xlsx')
+
+dado = ts(dado[,2:5], freq = 1)
+
+plot(dado[,1])
+
+library(forecast)
+
+Acf(dado[,1], type = 'correlation')
+Acf(dado[,1], type = 'partial')
+
+
+
+```
+
+```{r}
+
+# Analisando a segunda serie
+
+plot(dado[,2])
+
+Acf(dado[,2], type = 'correlation')
+Acf(dado[,2], type = 'partial')
+
+```
+
+```{r}
+# Analisando a terceira serie
+
+plot(dado[,3])
+
+Acf(dado[,3], type = 'correlation')
+Acf(dado[,3], type = 'partial')
+```
+
+Para a série 3, observa-se que pela FAC tenho decaimento pós q=2, e pela FACP decaimento pós p=1, logo, podemos testar um modelo ARMA(1,2)
+
+```{r}
+# Analisando a terceira serie
+
+plot(dado[,4])
+
+Acf(dado[,4], type = 'correlation')
+Acf(dado[,4], type = 'partial')
+```
+
+Para a série 3, observa-se que pela FAC tenho decaimento pós q=3, e pela FACP decaimento pós p=1, logo, podemos testar um modelo ARMA(1,3). Além disso, posso testar: ARMA(1), ARMA(1,1), ARMA(1,2), ARMA(1,3).
+
+## 3.4. ARIMA (Metodologia Box-Jenkins)
+
+O **ARIMA** é um dos modelos mais usados para **previsão de séries temporais** não estacionárias. Ele combina três componentes:
+
+1.  **AR (AutoRegressivo)**: Dependência dos valores passados.
+
+2.  **I (Integrado)**: Diferenciação para tornar a série estacionária.
+
+3.  **MA (Média Móvel)**: Dependência dos erros passados.
+
+Passo a passo:
+
+1.  **Identificação**: utilizando autocorrelação, autocorrelação parcial e outros critérios;
+2.  **Estimação**: dos parâmetros do modelo identificado.
+3.  **Verificação** do modelo ajustado: através dos resíduos,
+4.  **Previsão**.
+
+### 1. Identificação do Modelo
+
+1.  Verificação da Estacionariedade da Série (com teste de raíz unitária)
+
+2.  **A partir da série estacionária**, construir a FAC e FACP para determinar o tipo e a ordem do modelo.
+
+    ![](images/Screenshot%202025-05-26%20at%2016.46.35.png){width="593"}
+
+    Lembrando que, em AR a ordem do modelo é dada por FACP; já em MA a ordem do modelo é dada por FAC.
+
+```{r, message = False}
+
+# Carregando pacotes
+library(forecast) #Previsão de Modelos ARIMA
+library(lmtest) #Testes de Hipóteses da Autocorrelação
+require(tseries) #Teste de Normalidade
+require(stats) 
+library(FinTS) #Teste de heterocedasticidade (analisa se variancia é cte ou não)
+library(urca) #Teste de RU
+library(readxl) #Importar arquivos excel
+
+# Parte I: estacionaridade da série
+
+# leitura dos dados
+dados = read_excel('PIB_Agropecuaria_BJ.xlsx')
+
+dados = ts(dados[,2],start=c(2000,1),freq=4)
+
+plot(dados,main='Gráfico 1 - PIB Agropecuária',ylab='PIB (milhões R$)',xlab='Trim/Ano',col='blue')
+grid()
+
+
+```
+
+```{r}
+
+# Plotando alguns graficos para analisar a sazonalidade
+
+Acf(dados,type='correlation',lag.max = 36, main='Gráfico 2 - FAC') # grande depedência de valores antigos
+
+monthplot(dados, main='Gráfico 3 - Média e Desvio-padrão trimestral') # as MEAN e SD não são cte ao longo dos trimestres, apresentando sazonalidade
+```
+
+```{r}
+
+# identificada a sazonalidade, busca-se retirar 
+
+# Dessazonalização da Série
+
+modelo=decompose(dados,type='multiplicative')
+plot(modelo)
+
+y=dados/modelo$seasonal # aqui EFETIVAMENTE retiro a sazonalidade
+
+plot(y,main='Gráfico 4 - Série dessazonalizada')
+
+Acf(y, main='Gráfico 5 - FAC da série dessazonalizada')
+
+```
+
+Retomando a formulação da dessazonalidade:
+
+$$
+Y_t=T_t \cdot S_t \cdot \epsilon_t \rightarrow \frac{Y_t}{S_t}=T_t \cdot \epsilon_t
+$$
+
+Realizando o Teste de Raíz Unitária (RU) – ADF
+
+```{r}
+
+pib.df1 = ur.df(y,type='trend',lags=12, selectlags='BIC')
+summary(pib.df1)
+
+```
+
+Primeira análise: teste raíz unitária expandido (ADF eq. 4). Quero avaliar se o valor de gamma é menor que zero, rejeitando a hipótese nula (gamma = 0) entendendo que há estacionariedade. Para isso, avalio se o valor da estatística do teste (-0.7046) está ou não dentro da região crítica, neste caso não está (tau3 -4.04 -3.45 -3.15). Por isso, não rejeito a hipótese nula. Avaliando o parâmetro de tendência do modelo (beta) observo que sua estatística (2.3161) não pertence à região crítica também (phi3 8.73 6.49 5.47), posso portanto, excluindo o termo.
+
+```{r}
+
+pib.df2=ur.df(y,type='drift',lags=12,selectlags='BIC')
+summary(pib.df2)
+```
+
+Analisando os parâmetros do modelo sem beta (sem tendência), ainda observo raíz unitária. Cuidado que phi1 para 10pct está dentro da região crítica, todavia (vide fluxograma teste raíz unitária), não está utilizando distribuição normal, considerando que z.lag.1 é 0.121672.
+
+```{r}
+
+pib.df3=ur.df(y,type='none',lags=12,selectlags='BIC')
+summary(pib.df3)
+```
+
+A análise final indica que sim, a série temporal tem uma raíz unitária, não apresenta estacionariedade.
+
+```{r}
+
+dz=diff(y) # assumindo que gamma é zero (tem raíz unitária) podemos dizer, pelo menos, que a variação pode ser estacionária (dependente dos erros)
+
+par(mfrow=c(1,1))
+Acf(dz,lag.max = 18)
+Acf(dz,type='partial')
+```
+
+Para analisar, preciso adotar a tabela. ACF não é declinante (descarto AR), então é truncado em q = 8 defasagens (mas q =4 e q =2 defasagens também são bons candidatos). Partial ACF indica que talvez é declinante a partir de um valor truncado p = 3 ou p = 2.
+
+### 2. Estimação dos Parâmetros
+
+Escolhendo o modelo ARIMA (p, d, q)
+
+Lembrando que o parâmetro lambda do modelo adota tranformação logarítimica log() quando é igual a zero, e transformação box-cox quando é diferente de zero. Essas tranformações servem para estabilizar a variância e tornar o efeito sazonal aditivo.
+
+```{r}
+#Modelo 1: ARIMA(p,d,q)
+ano = 2018
+trim = 4
+
+p1=2
+d1=1 # toma automaticamente a variação do log(y)
+q1=2
+
+modelo1= Arima(window(y,end=c(ano,trim)),order=c(p1,d1,q1), method='ML', include.drift = TRUE,lambda=0) # maximum likelihood (ML) = máxima verossimilhança
+
+modelo1
+
+p2=3
+d2=1
+q2=2
+
+modelo2=Arima(window(y,end=c(ano,trim)),order=c(p2,d2,q2),method='ML', include.drift = TRUE,lambda=0)
+modelo2
+```
+
+Comparando os valores de AIC e BIC dos dois valores analisados. Como os valores são próximos, opto pelo modelo com menos parâmetros.
+
+No caso ARIMA(2,1,2), tenho 6 parâmetros: 2 valores y defasados, 2 valores e defasados, 1 drift (cte) e 1 desvio padrão dos resíduos.
+
+### 3. Verificação do Modelo
+
+```{r}
+### Etapa 3 - VERIFICAÇÃO
+# Resíduos do modelo 2
+
+residuos=ts(modelo1$residuals)
+
+Acf(residuos)
+
+Box.test(residuos,lag=1,type="Ljung-Box") 
+Box.test(residuos,lag=2,type="Ljung-Box")
+Box.test(residuos,lag=3,type="Ljung-Box") 
+Box.test(residuos,lag=4,type="Ljung-Box") 
+Box.test(residuos,lag=8,type="Ljung-Box")
+
+tsdiag(modelo1,gof.lag = 24) # analise gráfica sintética do proposta acima
+
+```
+
+A estatística Ljung-Box (1978) serve para testar se os primeiros k coeficientes de autocorrelaçãao amostrais são estatisticamente iguais a zero. Nesse caso, observa-se que para até 24 defasagens a correlações são iguais a zero (não rejeita a hipótese nula). Ou seja, os resíduos do modelo são brancos (média e variância constantes).
+
+```{r}
+
+#Teste de Normalidade
+
+par(mfrow=c(1,1))
+hist(residuos, freq=F, ylab='Densidade', xlab='Resíduos', main='Resíduos')
+par(new=TRUE)
+plot(density(residuos), axes=F,ann=F, col=4, lwd=2)  
+
+jarque.bera.test(residuos) 
+
+shapiro.test(residuos)
+```
+
+Observamos uma distribuição normal dos resíduos graficamente e estatísticamente.
+
+```{r}
+# Teste de Homocedasticidade
+ArchTest(residuos, lag=4)
+ArchTest(residuos, lag=8)
+ArchTest(residuos, lag=12)
+```
+
+Não rejeitar H_0 significa ausência de heterocedasticidade.
+
+### 4. Previsão
+
+Deixando-se H observações fora da estimação, tem-se opções:
+
+-   Estática: previsão um passo à frente;
+
+-   Dinâmica: previsão vários passos à frente (adotando valores previstos para gerar outros);
+
+![](images/Screenshot%202025-06-02%20at%2017.46.27.png){width="629"}
+
+![](images/Screenshot%202025-06-02%20at%2017.46.49.png){width="630"}
+
+```{r}
+# Validação/Previsão
+
+plot(y,ylab="PIB")
+lines(modelo1$fit,col='red')
+grid()
+
+accuracy(modelo1) # divide entre training e test set 
+
+```
+
+Atenção! Avaliar os erros somente é valido se compararmos com outro modelo.
+
+```{r}
+
+# Avaliação Estática: 
+
+ano1=2019
+trim1=1
+pib.model1 <- Arima(window(y,start=c(ano1,trim1)),model=modelo1, biasadj=T) 
+pib.model1
+pib.model1$fit
+
+min.pib=min(y,pib.model1$fit)
+max.pib=max(y,pib.model1$fit)
+
+
+plot(y,ylab="PIB",ylim=c(min.pib,max.pib))
+abline(v=(2019),col='blue',lty=1)
+lines(ts(pib.model1$fit,start=c(2019,1),freq=4),
+      col='red',lty=1,lwd=1,xlim=c(2000,2024))
+
+accuracy(pib.model1)
+```
+
+```{r}
+
+# Avaliação Dinâmica: 
+
+passos=19
+prev=forecast(modelo1,h=passos,level=c(0.95), biasadj=T)
+prev
+plot(prev,main='Previsão 19 passos à frente')
+
+min.pib=min(y,prev$lower)
+max.pib=max(y,prev$upper)
+plot(forecast(modelo1,h=passos,level=c(0.95), biasadj=T), ylab="PIB",ylim=c(min.pib,max.pib),main='Previsões 19 passos à frente')
+lines(y)
+lines(modelo1$fit,col='blue',lty=1,lwd=1,xlim=c(2000,2024),ylim=c(min.pib,max.pib))
+lines(ts(pib.model1$fit,start=c(2019,1),freq=4),col='red',lty=1,lwd=1,xlim=c(2000,2024),ylim=c(min.pib,max.pib))
+
+accuracy(forecast(modelo1,h=passos,biasadj=T),window(y,start=ano1))
+```
+
+# Revisão Final
+
+```{r}
+#No console instalar os pacotes:
+#install.packages("readxl") #Importar arquivos excel
+#install.packages("forecast") # Previsão de Modelos ARIMA
+#install.packages("lmtest") # Testes de Hipóteses de autocorrelação
+#install.packages('tseries') # Teste de Normalidade
+#install.packages('FinTS') # Teste de heterocedasticidade
+#install.packages("urca") # Teste de RU
+
+
+#Carregar pacotes
+library(readxl) #Importar arquivos excel
+library(forecast) # Previsão de Modelos ARIMA
+library(lmtest) # Testes de Hipóteses de autocorrelação
+library(FinTS) # Teste de heterocedasticidade
+library(urca) # Teste de RU
+library(tseries) # Teste de Normalidade
+
+```
+
+```{r}
+Dados=read_excel('PIB_Anual_Belgica_BJ.xlsx')
+
+pib=ts(Dados[,2],start=1953,freq=1)
+plot(pib)
+
+lpib=log(pib)
+plot(lpib)
+Acf(lpib)
+
+#Teste ADF
+pib.adf=ur.df(lpib,type='trend', selectlags = 'BIC', lags=12)
+summary(pib.adf)
+
+```
+
+Não rejeito a hipótese nula com tendência, ou seja, tem raíz unitária.
+
+```{r}
+pib.adf = ur.df(lpib,type='drift', selectlags = 'BIC', lags=12)
+summary(pib.adf)
+```
+
+```{r}
+dlpib=diff(lpib,differences=1)
+plot(dlpib)
+Acf(dlpib)
+```
+
+```{r}
+pib.adf = ur.df(dlpib,type='drift',selectlags = 'BIC',lags=12)
+summary(pib.adf)
+```
+
+```{r}
+pib.adf=ur.df(dlpib,type='none',selectlags = 'BIC',lags=12)
+summary(pib.adf)
+```
+
+```{r}
+dlpib=diff(lpib,differences=2) # differences = 2 pois é a diferença da diferença, dado que a diferença apresentou raíz unitária
+plot(dlpib)
+Acf(dlpib)
+
+plot(dlpib)
+par(mfrow=c(1,2))
+Acf(dlpib)
+Acf(dlpib,type='partial')
+```
+
+**Escolha do(s) modelo(s) ARIMA(p,d,q)**
+
+Lembrando que o parâmetro lambda do modelo adota tranformação logarítimica log() quando é igual a zero, e transformação box-cox quando é diferente de zero. Essas tranformações servem para estabilizar a variância e tornar o efeito sazonal aditivo.
+
+```{r}
+#Modelo 1: ARIMA(0,2,1)
+p1=0
+d1=2
+q1=1
+ano=2000
+ajustpdq1=Arima(window(pib,end=ano),order=c(p1,d1,q1),method='ML',lambda=0)
+ajustpdq1
+
+```
+
+```{r}
+
+#Modelo 2: ARIMA(1,2,0)
+p2=1
+d2=2
+q2=0
+ano=2000
+ajustpdq2=Arima(window(pib,end=ano),order=c(p2,d2,q2),method='ML',lambda=0)
+ajustpdq2
+
+```
+
+```{r}
+#Modelo 3: ARIMA(1,2,1)
+p3=1
+d3=2
+q3=1
+ano=2000
+ajustpdq3=Arima(window(pib,end=ano),order=c(p3,d3,q3),method='ML',lambda=0)
+ajustpdq3
+
+```
+
+```{r}
+#Modelo Escolhido para análise
+p= 0 
+d= 2 
+q= 1 
+ano=2000
+ajustpdq=Arima(window(pib,end=ano),order=c(p,d,q),method='ML',lambda=0)
+ajustpdq
+```
+
+```{r}
+### Etapa 3 - VERIFICAÇÃO DO RESÍDUO BRANCO DO MODELO
+
+# Resíduos do modelo ARIMA(0,2,1)
+
+residuos=ts(ajustpdq$residuals)
+
+Acf(residuos)
+
+Box.test(residuos,lag=1,type="Ljung-Box") 
+Box.test(residuos,lag=2,type="Ljung-Box")
+Box.test(residuos,lag=3,type="Ljung-Box") # esse teste analisa o acumulaado, até a terceira defasagem, por exemplo. 
+Box.test(residuos,lag=4,type="Ljung-Box") 
+Box.test(residuos,lag=8,type="Ljung-Box")
+
+
+tsdiag(ajustpdq,gof.lag = 16) # grafico para analisar as defasagens
+
+# Teste de Normalidade
+par(mfrow=c(1,1))
+hist(residuos, freq=F, ylab='Densidade', xlab='Resíduos', main='Resíduos')
+par(new=TRUE)
+plot(density(residuos), axes=F,ann=F, col=4, lwd=2)  
+
+jarque.bera.test(residuos) 
+
+shapiro.test(residuos)  
+
+# Analisando se a variância é cte (hipótese nula)
+ArchTest(residuos, lag=4)
+ArchTest(residuos, lag=8)
+ArchTest(residuos, lag=12)
+```
+
+```{r}
+#Período de Treinamento
+plot(pib,ylab="PIB")
+lines(ajustpdq$fit,col='red')
+grid()
+
+accuracy(ajustpdq)
+```
+
+```{r}
+#Período teste 2001 a 2010, 1 passo à frente (conheço o instante imediatamente anterior, ou seja, não é previsão sobre previsão)
+ano1=2001
+pib.model2 <- Arima(window(pib,start=ano1),model=ajustpdq, biasadj=T)
+pib.model2$fit
+min.pib2=min(pib,pib.model2$fit)
+max.pib2=max(pib,pib.model2$fit)
+
+plot(pib,ylab="PIB",ylim=c(min.pib2,max.pib2))
+lines(pib.model2$fit,col='red')
+
+accuracy(pib.model2)
+
+```
+
+```{r}
+# Período teste 2001 a 2010, previsão 10 passos à frente
+passos=10
+prev=forecast(ajustpdq,h=passos,level=c(0.95), biasadj=T)
+prev
+plot(prev)
+
+min.pib=min(pib,prev$lower)
+max.pib=max(pib,prev$upper)
+plot(forecast(ajustpdq,h=passos,level=c(0.95), biasadj=T), ylab="PIB",ylim=c(min.pib,max.pib))
+lines(pib)
+lines(ajustpdq$fit,col='red')
+
+accuracy(forecast(ajustpdq,h=passos,biasadj=T),window(pib,start=ano1))
+```
+
+```{r}
+#Previsões de 2011 a 2020
+anoFinal=2010
+pib.modelo <- Arima(window(pib,end=anoFinal),order=c(p,d,q),method='ML',lambda=0)
+previsao<-forecast(pib.modelo,h=passos,level=c(0.95),biasadj=T)
+previsao
+plot(previsao)
+
+```
+
+Dica de Ouro da professora:
+
+```{r}
+auto.arima(pib)
+```
+
+O modelo SARIMA(P,D,Q) utiliza os parâmetros em maiúsculo para tratar sobre a sazonalidade.
